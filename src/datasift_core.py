@@ -217,10 +217,25 @@ async def dismiss_popups(page) -> None:
             // Remove Beamer NPS survey iframe (blocks pointer events globally)
             const nps = document.getElementById('npsIframeContainer');
             if (nps) { nps.remove(); removed++; }
+            // Remove Beamer push modal (different from NPS — also blocks all pointer events)
+            const beamerPush = document.getElementById('beamerPushModal');
+            if (beamerPush) { beamerPush.remove(); removed++; }
             // Also remove by class
             document.querySelectorAll('[class*="nps-iframe"], [class*="beamer"]').forEach(
                 el => { el.remove(); removed++; }
             );
+            // Remove DataSift tutorial/onboarding modal overlay (Modalstyles__ModalOverlay)
+            // Appears after upload and after navigating to Records — blocks ALL pointer events
+            document.querySelectorAll('[class*="ModalOverlay"]').forEach(el => {
+                el.remove(); removed++;
+            });
+            // Remove aside/filter panel overlay (Asidestyles__AsideOverlay, id=asideOverlay)
+            // Left open when _filter_by_list fails — blocks Manage/Send To buttons
+            const aside = document.getElementById('asideOverlay');
+            if (aside) { aside.remove(); removed++; }
+            document.querySelectorAll('[class*="AsideOverlay"]').forEach(el => {
+                el.remove(); removed++;
+            });
             // Look for the notification popup overlay
             const els = document.querySelectorAll(
                 '[class*="notification"], [class*="Notification"], '

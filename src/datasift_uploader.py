@@ -620,6 +620,13 @@ async def _filter_by_list(page: Page, list_name: str) -> bool:
     except Exception as e:
         logger.warning("Filter by list failed: %s", e)
         await _screenshot(page, "filter_failed")
+        # Close the filter panel so asideOverlay doesn't block subsequent clicks
+        try:
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(500)
+        except Exception:
+            pass
+        await _dismiss_popups(page)
         return False
 
 
@@ -753,6 +760,10 @@ async def enrich_records(page: Page, list_name: str) -> dict:
             result["message"] = "Could not select records for enrichment"
             logger.error(result["message"])
             return result
+
+        # Dismiss any overlays (asideOverlay, ModalOverlay) before clicking Manage
+        await _dismiss_popups(page)
+        await page.wait_for_timeout(500)
 
         # Click Manage dropdown
         manage_btn = page.locator('button:has-text("Manage")')
@@ -905,6 +916,10 @@ async def skip_trace_records(page: Page, list_name: str) -> dict:
             result["message"] = "Could not select records for skip trace"
             logger.error(result["message"])
             return result
+
+        # Dismiss any overlays (asideOverlay, ModalOverlay) before clicking Send To
+        await _dismiss_popups(page)
+        await page.wait_for_timeout(500)
 
         # Click "Send To" dropdown
         send_to_btn = page.locator('button:has-text("Send To")')
@@ -1070,8 +1085,15 @@ async def upload_to_datasift(
                     result["enrich_result"] = enrich_result
                     logger.info("Enrichment: %s", enrich_result.get("message", ""))
 
-                # Skip trace for phones + emails
+                # Skip trace for phones + emails.
+                # Fresh page load resets selection/overlay state left behind by
+                # the enrich flow — otherwise checkboxes register but Manage/Send
+                # To buttons stay hidden.
                 if skip_trace:
+                    if enrich:
+                        await page.goto(DATASIFT_RECORDS_URL, wait_until="domcontentloaded")
+                        await page.wait_for_timeout(5000)
+                        await _dismiss_popups(page)
                     skip_result = await skip_trace_records(page, list_name)
                     result["skip_trace_result"] = skip_result
                     logger.info("Skip trace: %s", skip_result.get("message", ""))
@@ -1182,6 +1204,12 @@ async def upload_datasift_split(
                     logger.info("Enrichment: %s", enrich_result.get("message", ""))
 
                 if skip_trace:
+                    # Fresh page load resets selection/overlay state left behind
+                    # by enrich — otherwise Manage/Send To stay hidden.
+                    if enrich:
+                        await page.goto(DATASIFT_RECORDS_URL, wait_until="domcontentloaded")
+                        await page.wait_for_timeout(5000)
+                        await _dismiss_popups(page)
                     skip_result = await skip_trace_records(page, first_list)
                     combined["skip_trace_result"] = skip_result
                     logger.info("Skip trace: %s", skip_result.get("message", ""))

@@ -11,8 +11,8 @@ Sources implemented:
      Cadence: Daily filings
      State file: tracks last scanned case number for incremental runs
 
-  3. Tax Sale — Franklin County Treasurer annual tax lien list CSV (HTTP, no auth)
-     URL: https://treasurer.franklincountyohio.gov/TREA-website/media/TREA-Documents/Forms/
+  3. Tax Sale — Franklin County Treasurer annual tax lien list CSV (Playwright, 403 on direct HTTP)
+     URL: https://treasurer.franklincountyohio.gov/Delinquent-Taxes/Tax-Lien-Sale
      Cadence: Annual (Oct/Nov release); returns all records from current year list
 
 Entry point:
@@ -20,7 +20,6 @@ Entry point:
   notices = await scrape_franklin_oh(since_date="2026-04-15", types=["probate", "tax_sale"])
 """
 
-import asyncio
 import csv
 import io
 import logging
@@ -71,10 +70,11 @@ PROBATE_CASE_MILESTONES: list[tuple[int, str]] = [
     (644700, "2026-04-21"),
 ]
 
-# Tax lien CSV URL template (year = year of sale)
+TAX_LIEN_PAGE_URL = "https://treasurer.franklincountyohio.gov/Delinquent-Taxes/Tax-Lien-Sale"
+# URL template (year = year of sale) — requires browser session to avoid 403
 TAX_LIEN_CSV_URL = (
     "https://treasurer.franklincountyohio.gov/"
-    "TREA-website/media/TREA-Documents/Forms/final-tax-lien-list-{year}.csv"
+    "files/assets/treasurer/v/1/documents/final-tax-lien-list-{year}.csv"
 )
 
 _HTTP_HEADERS = {
@@ -218,7 +218,6 @@ def _scrape_probate_case(case_num: int) -> Optional[NoticeData]:
     # Decedent address (often N/A in Franklin County)
     street = fields.get("Decedent Street", "N/A")
     city = fields.get("City", "N/A")
-    state = fields.get("State", "OH")
     zip_ = fields.get("Zip", "")
 
     # Fetch PR/administrator info from fiduciary page
@@ -229,27 +228,18 @@ def _scrape_probate_case(case_num: int) -> Optional[NoticeData]:
     pr_zip = ""
 
     time.sleep(0.5)
+    # The ;;01 URL serves fiduciary detail directly — no link-following needed
     fid_resp = _get(PROBATE_FID_URL.format(case_num=case_num))
     if fid_resp and len(fid_resp.text) > 300:
-        # The fiduciary list page links to individual fiduciary detail
-        fid_link = re.search(
-            r'href="(http://probatesearch\.franklincountyohio\.gov/netdata/PBFidDetail\.ndm/'
-            r'FID_DETAIL\?caseno=\d+;;[^"]+)"',
-            fid_resp.text
-        )
-        if fid_link:
-            time.sleep(0.5)
-            fid_detail_resp = _get(fid_link.group(1))
-            if fid_detail_resp:
-                fid_fields = _parse_probate_fid(fid_detail_resp.text)
-                pr_name_raw = fid_fields.get("Estate Fiduciaries Name", "")
-                pr_name = _name_from_last_first(pr_name_raw) if pr_name_raw else ""
-                pr_street = fid_fields.get("Street", "")
-                pr_city = fid_fields.get("City", "")
-                pr_state = fid_fields.get("State", "OH")
-                pr_zip = fid_fields.get("Zip", "")
-                if pr_street.upper() == "N/A":
-                    pr_street = ""
+        fid_fields = _parse_probate_fid(fid_resp.text)
+        pr_name_raw = fid_fields.get("Estate Fiduciaries Name", "")
+        pr_name = _name_from_last_first(pr_name_raw) if pr_name_raw else ""
+        pr_street = fid_fields.get("Street", "")
+        pr_city = fid_fields.get("City", "")
+        pr_state = fid_fields.get("State", "OH")
+        pr_zip = fid_fields.get("Zi", "")  # HTML truncates "Zip" label to "Zi"
+        if pr_street.upper() == "N/A":
+            pr_street = ""
 
     notice = NoticeData(
         date_added=_fmt(opened),
@@ -335,8 +325,12 @@ def scrape_probate(
 # ── Tax Sale Scraper ───────────────────────────────────────────────────────
 
 
-def scrape_tax_sale(year: Optional[int] = None) -> list[NoticeData]:
+async def scrape_tax_sale(year: Optional[int] = None) -> list[NoticeData]:
     """Download and parse the Franklin County annual tax lien list CSV.
+
+    The treasurer site returns 403 on direct HTTP requests; must use a Playwright
+    browser session. Visits the Tax Lien Sale page first for referrer/cookie context,
+    then downloads the CSV link found on that page.
 
     The list is published each fall (Oct/Nov) for that year's delinquencies.
     All records are returned — there's no date filtering since it's a point-in-time
@@ -345,33 +339,61 @@ def scrape_tax_sale(year: Optional[int] = None) -> list[NoticeData]:
     Args:
         year: The tax lien list year (defaults to current year, falls back to prior year).
     """
+    from playwright.async_api import async_playwright
+
     today = date.today()
     if year is None:
         year = today.year
 
-    url = TAX_LIEN_CSV_URL.format(year=year)
-    logger.info("Tax sale: fetching %s", url)
-
-    resp = _get(url)
-    if not resp:
-        # Try previous year as fallback
-        if year == today.year:
-            fallback_year = year - 1
-            url = TAX_LIEN_CSV_URL.format(year=fallback_year)
-            logger.info("Tax sale: current year list not found, trying %d: %s", fallback_year, url)
-            resp = _get(url)
-            if not resp:
-                logger.warning("Tax sale: no list found for %d or %d", year, fallback_year)
-                return []
-            year = fallback_year
-        else:
-            logger.warning("Tax sale: list not found for %d", year)
-            return []
-
-    content = resp.content.decode("utf-8-sig", errors="replace")
-    reader = csv.DictReader(io.StringIO(content))
-    notices: list[NoticeData] = []
     today_str = _fmt(today)
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        ctx = await browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            accept_downloads=True,
+        )
+        page = await ctx.new_page()
+
+        try:
+            # Establish session context on the Tax Lien Sale page
+            await page.goto(TAX_LIEN_PAGE_URL, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(1500)
+
+            # Try current year then prior year. Short expect_download timeout so a
+            # 404 page (no download event) fails fast instead of hanging 30s.
+            csv_content: Optional[str] = None
+            used_year = year
+            for try_year in ([year, year - 1] if year == today.year else [year]):
+                csv_url = TAX_LIEN_CSV_URL.format(year=try_year)
+                logger.info("Tax sale: downloading %s", csv_url)
+                try:
+                    async with page.expect_download(timeout=8000) as dl_info:
+                        try:
+                            await page.goto(csv_url, wait_until="domcontentloaded", timeout=15000)
+                        except Exception:
+                            pass  # "Download is starting" error is expected when a CSV triggers
+                    download = await dl_info.value
+                    path = await download.path()
+                    csv_content = Path(path).read_text(encoding="utf-8-sig", errors="replace")
+                    used_year = try_year
+                    break
+                except Exception as exc:
+                    logger.info("Tax sale: %d not available (%s), trying next", try_year, exc)
+                    continue
+
+        finally:
+            await browser.close()
+
+    if csv_content is None:
+        logger.warning("Tax sale: no list found for %d or %d", year, year - 1)
+        return []
+
+    reader = csv.DictReader(io.StringIO(csv_content))
+    notices: list[NoticeData] = []
 
     for i, row in enumerate(reader):
         parcel = row.get("Dist/Parc/Ext #", "").strip()
@@ -388,6 +410,7 @@ def scrape_tax_sale(year: Optional[int] = None) -> list[NoticeData]:
         if not location and not owner:
             continue
 
+        url = TAX_LIEN_CSV_URL.format(year=used_year)
         notice = NoticeData(
             date_added=today_str,
             notice_type="tax_sale",
@@ -405,7 +428,7 @@ def scrape_tax_sale(year: Optional[int] = None) -> list[NoticeData]:
             tax_delinquent_years=cdq_year,
             source_url=url,
             raw_text=(
-                f"Tax lien {year} | Parcel: {parcel} | "
+                f"Tax lien {used_year} | Parcel: {parcel} | "
                 f"Tax due: ${net_tax} | Lien value: ${lien_val} | "
                 f"Delinquent since: {cdq_year}"
             ),
@@ -415,7 +438,7 @@ def scrape_tax_sale(year: Optional[int] = None) -> list[NoticeData]:
         if (i + 1) % 500 == 0:
             logger.info("  Tax sale: parsed %d records", i + 1)
 
-    logger.info("Tax sale: %d records from %d list", len(notices), year)
+    logger.info("Tax sale: %d records from %d list", len(notices), used_year)
     return notices
 
 
@@ -482,9 +505,8 @@ async def scrape_foreclosures(
             await page.fill("#LogName", username)
             await page.fill("#LogPass", password)
 
-            # Submit — find submit button (input or button)
-            submit = page.locator("input[type='submit'], button[type='submit']").first
-            await submit.click()
+            # Submit — the "button" is a <div id="LogButton"> inside a <label>
+            await page.locator("#LogButton").click()
             await page.wait_for_timeout(3000)
 
             # Check for lockout or error
@@ -558,10 +580,6 @@ def _parse_realforeclose_html(html: str, auction_date: date, url: str) -> list[N
     )
     parcel_blocks = re.findall(
         r"(?:Parcel|Parcel #)[:\s]*([A-Z0-9\-]+)",
-        html, re.IGNORECASE
-    )
-    case_blocks = re.findall(
-        r"Case\s*(?:#|Number)[:\s]*([\w\-]+)",
         html, re.IGNORECASE
     )
     min_bid_blocks = re.findall(
@@ -687,7 +705,7 @@ async def scrape_franklin_oh(
 
     if "tax_sale" in types:
         logger.info("── Tax Sale ──")
-        ts_notices = scrape_tax_sale()
+        ts_notices = await scrape_tax_sale()
         all_notices.extend(ts_notices)
         logger.info("Tax sale: %d records", len(ts_notices))
 
