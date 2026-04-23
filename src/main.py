@@ -1018,6 +1018,7 @@ def cli_main() -> None:
         choices=[
             "daily", "historical", "pdf-import", "photo-import", "dropbox-watch",
             "csv-import", "phone-validate", "manage-sold", "manage-presets",
+            "oh-daily",  # Franklin County, OH scraper
             # New analysis & workflow modes
             "comp", "rehab", "analyze-deal", "market-analysis", "buyer-prospect",
             "deep-prospect", "lead-manage", "setup-sequences", "niche-sequential",
@@ -1027,6 +1028,7 @@ def cli_main() -> None:
             "daily/historical = scrape notices; pdf-import/photo-import = import from files; "
             "dropbox-watch = poll Dropbox; csv-import = re-enrich CSV; "
             "phone-validate = Trestle scoring; manage-sold/manage-presets = DataSift ops; "
+            "oh-daily = Franklin County OH scraper (foreclosure/probate/tax_sale); "
             "comp = comparable sales ARV; rehab = rehab cost estimate; "
             "analyze-deal = full deal analysis; market-analysis = zip code scoring; "
             "buyer-prospect = cash buyer lists; deep-prospect = 4-level research; "
@@ -1683,6 +1685,11 @@ def cli_main() -> None:
         _run_csv_import(args)
         return
 
+    # Franklin County, OH scraper
+    if args.mode == "oh-daily":
+        _run_oh_franklin(args)
+        return
+
     # Filter saved searches
     counties = None
     if args.counties and args.counties.lower() != "all":
@@ -1713,6 +1720,60 @@ def cli_main() -> None:
         except Exception:
             pass
         sys.exit(1)
+
+
+def _run_oh_franklin(args) -> None:
+    """Run Franklin County, OH scraper → enrich → export pipeline."""
+    import json
+    from oh_franklin_scraper import scrape_franklin_oh
+
+    # Parse notice types filter (default: all three)
+    types = None
+    if args.types and args.types.lower() != "all":
+        types = [t.strip() for t in args.types.split(",")]
+
+    # Load/save probate case-number state for incremental runs
+    state_path = config.PROJECT_ROOT / "oh_franklin_state.json"
+    state: dict = {}
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logging.warning("Could not load OH Franklin state: %s", e)
+
+    notices = asyncio.run(scrape_franklin_oh(
+        mode=args.mode,
+        since_date=args.since,
+        types=types,
+        state=state,
+        sheriff_username=config.FRANKLIN_OH_SHERIFF_USERNAME,
+        sheriff_password=config.FRANKLIN_OH_SHERIFF_PASSWORD,
+    ))
+
+    # Persist updated probate case-number checkpoint
+    try:
+        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        logging.info("OH Franklin state saved to %s", state_path)
+    except OSError as e:
+        logging.warning("Could not save OH Franklin state: %s", e)
+
+    if not notices:
+        logging.warning("No Franklin County OH records found for the given date range")
+        return
+
+    # Write raw output CSV (no enrichment — Ohio enrichment pipeline not yet wired)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    if args.split:
+        from data_formatter import write_csv_by_type
+        paths = write_csv_by_type(notices, county="franklin_oh", timestamp=timestamp)
+        for p in paths:
+            logging.info("Output: %s", p)
+    else:
+        from data_formatter import write_csv
+        path = write_csv(notices, filename=f"franklin_oh_{timestamp}.csv")
+        logging.info("Output: %s", path)
+
+    logging.info("Done — %d Franklin County OH records exported", len(notices))
 
 
 def _run_scrape_pipeline(args, searches) -> None:

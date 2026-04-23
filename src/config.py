@@ -54,6 +54,8 @@ ANCESTRY_PASSWORD = os.getenv("ANCESTRY_PASSWORD", "")
 DROPBOX_APP_KEY = os.getenv("DROPBOX_APP_KEY", "")            # Dropbox OAuth2 app key
 DROPBOX_APP_SECRET = os.getenv("DROPBOX_APP_SECRET", "")
 DROPBOX_REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN", "")
+FRANKLIN_OH_SHERIFF_USERNAME = os.getenv("FRANKLIN_OH_SHERIFF_USERNAME", "")  # RealForeclose account
+FRANKLIN_OH_SHERIFF_PASSWORD = os.getenv("FRANKLIN_OH_SHERIFF_PASSWORD", "")
 
 # ── LLM Backend ──────────────────────────────────────────────────────
 LLM_BACKEND = os.getenv("LLM_BACKEND", "anthropic")           # "anthropic", "ollama", or "openrouter"
