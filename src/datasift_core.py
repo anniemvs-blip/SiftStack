@@ -202,14 +202,17 @@ async def dismiss_popups(page) -> None:
     events globally — it MUST be removed before any click interactions.
     """
     try:
-        # Try clicking dismiss text elements first
+        # Try clicking dismiss text elements — don't return early, multiple popups
+        # can stack (notification permission + Beamer + tutorial modal).
         for text in ["NO, THANKS", "No, thanks", "No Thanks", "NO THANKS", "Not Now", "Dismiss"]:
-            el = page.get_by_text(text, exact=True)
-            if await el.count() > 0:
-                await el.first.click(force=True)
-                await page.wait_for_timeout(1000)
-                logger.debug("Dismissed popup via '%s'", text)
-                return
+            try:
+                el = page.get_by_text(text, exact=True)
+                if await el.count() > 0:
+                    await el.first.click(force=True, timeout=2000)
+                    await page.wait_for_timeout(500)
+                    logger.debug("Dismissed popup via '%s'", text)
+            except Exception:
+                pass
 
         # JavaScript fallback: remove popup elements from DOM
         removed = await page.evaluate("""() => {
