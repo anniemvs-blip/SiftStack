@@ -667,8 +667,15 @@ async def scrape_franklin_oh(
 
     if types is None:
         # Default: omit "foreclosure" (Sheriff Auction) — Recorder gives the
-        # same signal 4-12 weeks earlier. Run `--types foreclosure` to opt back in.
-        types = ["probate", "tax_sale", "tax_delinquent", "eviction", "recorder"]
+        # same signal 4-12 weeks earlier. Run `--types foreclosure` to opt in.
+        #
+        # Default: omit "tax_sale" — the Treasurer's final tax lien list is
+        # an annual publication (next refresh Oct 2026). Re-downloading 900+
+        # parcels every daily run inflates the CSV with stale data already
+        # in DataSift, burns enrichment + skip-trace credits, and dilutes the
+        # day's actual new distress signal. Run `--types tax_sale` (or add
+        # tax_sale to a comma list) once after the new annual list is posted.
+        types = ["probate", "tax_delinquent", "eviction", "recorder"]
 
     today = date.today()
 
