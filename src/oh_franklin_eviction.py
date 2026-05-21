@@ -189,6 +189,8 @@ def scrape_evictions(since: Optional[date] = None) -> list[NoticeData]:
     notices: list[NoticeData] = []
     parse_errors = 0
     skipped_before_since = 0
+    skipped_apartments = 0
+    apt_pattern = re.compile(r"\b(APT|APARTMENT)\b", re.IGNORECASE)
 
     for url, start, end in needed:
         logger.info("  Eviction: downloading %s to %s", start, end)
@@ -215,10 +217,18 @@ def scrape_evictions(since: Optional[date] = None) -> list[NoticeData]:
                 skipped_before_since += 1
                 continue
 
+            # Drop apartment units — tenants in apartments don't map to
+            # single-family REI targets, and the landlord (plaintiff) is
+            # typically a large property management company we already
+            # filter out at the entity-owner step.
+            if apt_pattern.search(notice.address or ""):
+                skipped_apartments += 1
+                continue
+
             notices.append(notice)
 
     logger.info(
-        "Eviction done: %d records (skipped %d before %s, %d parse errors)",
-        len(notices), skipped_before_since, since, parse_errors,
+        "Eviction done: %d records (skipped %d before %s, %d apartments, %d parse errors)",
+        len(notices), skipped_before_since, since, skipped_apartments, parse_errors,
     )
     return notices
