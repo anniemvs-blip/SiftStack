@@ -666,7 +666,7 @@ async def scrape_franklin_oh(
         state = {}
 
     if types is None:
-        types = ["foreclosure", "probate", "tax_sale", "tax_delinquent", "eviction"]
+        types = ["foreclosure", "probate", "tax_sale", "tax_delinquent", "eviction", "recorder"]
 
     today = date.today()
 
@@ -723,15 +723,16 @@ async def scrape_franklin_oh(
         all_notices.extend(ev_notices)
         logger.info("Eviction: %d records", len(ev_notices))
 
-    if "lis_pendens" in types:
-        # Recorder lis-pendens scraper — earliest foreclosure signal but
-        # currently a Phase 3 R&D skeleton (returns 0 records until Doc-Type
-        # UI filter is wired up). See oh_franklin_recorder.py docstring.
-        logger.info("── Recorder Lis Pendens (Phase 3 WIP) ──")
-        from oh_franklin_recorder import scrape_recorder_lis_pendens
-        lp_notices = scrape_recorder_lis_pendens(since=since, until=until)
-        all_notices.extend(lp_notices)
-        logger.info("Lis pendens: %d records", len(lp_notices))
+    if "recorder" in types or "lis_pendens" in types:
+        # Recorder scraper — earliest distress signal. Pulls LIS PENDENS
+        # (foreclosure within 7 days of complaint per ORC 2703.26) plus
+        # FEDERAL TAX LIEN, MECHANICS LIEN, ASSIGN OF RENTS, CERTIFICATE OF
+        # TRANSFER, TRUST, SHERIFFS DEED. See oh_franklin_recorder.py.
+        logger.info("── Recorder (Notice/Lien/Trust/Transfer) ──")
+        from oh_franklin_recorder import scrape_recorder
+        rc_notices = scrape_recorder(since=since, until=until)
+        all_notices.extend(rc_notices)
+        logger.info("Recorder: %d records", len(rc_notices))
 
     logger.info("Franklin County OH total: %d notices", len(all_notices))
     return all_notices
