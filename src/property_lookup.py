@@ -457,12 +457,12 @@ async def lookup_decedent_properties(notices: list) -> None:
                         raw_addr = _normalize_tpad_address(raw_addr)
 
                     notice.address = raw_addr
-                    notice.state = "TN"
+                    notice.state = "OH"
 
                     # For Knox, KGIS results don't include city/zip in search list
                     # We'll rely on Smarty standardization to fill those in
                     if notice.county.lower() == "knox":
-                        notice.city = "Knoxville"  # Default, Smarty will correct
+                        notice.city = "Columbus"  # Default, Smarty will correct
                     elif notice.county.lower() == "blount":
                         notice.city = BLOUNT_DEFAULT_CITY
 

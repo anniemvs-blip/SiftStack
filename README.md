@@ -77,13 +77,13 @@ cp .env.example .env
 # Edit .env with your API keys (see Configuration below)
 
 # Run your first scrape
-python src/main.py daily --counties Knox
+python src/main.py daily --counties Franklin
 
 # Or import a scanned PDF
-python src/main.py pdf-import --pdf-path ./tax_sale.pdf --pdf-county Knox
+python src/main.py pdf-import --pdf-path ./tax_sale.pdf --pdf-county Franklin
 
 # Or process courthouse photos
-python src/main.py photo-import --folder ./photos --photo-county Knox --photo-type probate
+python src/main.py photo-import --folder ./photos --photo-county Franklin --photo-type probate
 
 # Full automated pipeline (scrape + enrich + upload to DataSift + notify Slack)
 python src/main.py daily --upload-datasift --notify-slack
@@ -91,10 +91,10 @@ python src/main.py daily --upload-datasift --notify-slack
 
 ## Adapting to Your Market
 
-SiftStack is built for Knox/Blount County, TN but the architecture is market-agnostic. Use any county name — the pipeline accepts it and degrades gracefully if a county-specific API (like tax lookup) isn't available:
+SiftStack is built for Franklin County, OH but the architecture is market-agnostic. Use any county name — the pipeline accepts it and degrades gracefully if a county-specific API (like tax lookup) isn't available:
 
 1. **Saved Searches** — Edit `SAVED_SEARCHES` in `src/config.py` to match your county's notice site
-2. **Tax API** — The tax enricher (`src/tax_enricher.py`) queries your county's property tax API. Knox is built in; add yours alongside it
+2. **Tax API** — The tax enricher (`src/tax_enricher.py`) queries your county's property tax API. Franklin County Auditor is built in; add yours alongside it
 3. **Notice Parser** — The regex patterns in `src/notice_parser.py` handle 7 notice types: foreclosure, tax sale, tax delinquent, probate, eviction, code violation, divorce
 4. **Photo Import** — Works with any courthouse terminal in any county — the OCR + LLM pipeline is county-independent
 5. **Dropbox Watch** — Create folders for your county (`/YourCounty/foreclosure/`, etc.) and the watcher picks them up automatically
@@ -141,11 +141,13 @@ These apply to every scheduled run.
 
 ## Configuration
 
-### Required (for web scraping)
+### Required (for Franklin County, OH scraping)
 | Variable | Service | Cost |
 |----------|---------|------|
-| `TNPN_EMAIL` / `TNPN_PASSWORD` | Your state's public notice site | Free account |
-| `CAPTCHA_API_KEY` | [2Captcha](https://2captcha.com) | ~$3/1,000 solves |
+| `FRANKLIN_OH_SHERIFF_USERNAME` / `_PASSWORD` | [Franklin Co. Sheriff Sale Auction](https://franklin.sheriffsaleauction.ohio.gov) | Free account |
+| `DATASIFT_EMAIL` / `DATASIFT_PASSWORD` | [DataSift.ai](https://datasift.ai) CRM | Your existing plan |
+
+Notes: Franklin OH's other primary sources (Probate Court NetData, Treasurer Tax Lien CSV) are public and require no credentials. The TN-only variables (`TNPN_EMAIL`, `CAPTCHA_API_KEY`) remain in `.env.example` for legacy Tennessee deployments but are NOT required for Franklin OH operation.
 
 ### Enrichment APIs (optional, pipeline degrades gracefully)
 | Variable | Service | Cost | What It Adds |
@@ -176,8 +178,8 @@ Every API is optional. Missing a key? That enrichment step is skipped and the pi
 # ── Data Acquisition ────────────────────────────────────────────
 python src/main.py daily                    # Scrape new notices since last run
 python src/main.py historical               # Scrape last 12 months
-python src/main.py pdf-import --pdf-path FILE --pdf-county Knox
-python src/main.py photo-import --folder DIR --photo-county Knox --photo-type probate
+python src/main.py pdf-import --pdf-path FILE --pdf-county Franklin
+python src/main.py photo-import --folder DIR --photo-county Franklin --photo-type probate
 python src/main.py dropbox-watch            # Auto-poll Dropbox for new photos
 python src/main.py csv-import --csv-path FILE
 
@@ -185,8 +187,8 @@ python src/main.py csv-import --csv-path FILE
 python src/main.py comp --address "123 Main St"
 python src/main.py rehab --address "123 Main St" --tier 2
 python src/main.py analyze-deal --address "123 Main St" --purchase-price 150000
-python src/main.py market-analysis --counties Knox
-python src/main.py buyer-prospect --counties Knox
+python src/main.py market-analysis --counties Franklin
+python src/main.py buyer-prospect --counties Franklin
 python src/main.py deep-prospect --csv-path output/records.csv --depth 3
 
 # ── CRM Operations ─────────────────────────────────────────────
@@ -198,7 +200,7 @@ python src/main.py lead-manage --lead-action qualify
 # ── Workflow Tools ──────────────────────────────────────────────
 python src/main.py setup-sequences --dry-run
 python src/main.py niche-sequential --channel sms --day 1
-python src/main.py playbook --blueprint wholesale --market knoxville
+python src/main.py playbook --blueprint wholesale --market columbus
 ```
 
 ### Common Flags
@@ -287,7 +289,7 @@ src/
 
 ## API Cost Estimates
 
-Running daily in one county (Knox, TN — ~20-40 new notices/day):
+Running daily in one county (Franklin, OH — volume varies by source):
 
 | Service | Monthly Cost | What It Does |
 |---------|-------------|-------------|

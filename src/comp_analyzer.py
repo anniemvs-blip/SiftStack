@@ -4,12 +4,12 @@ Generates appraiser-grade property valuations for real estate investment
 analysis. Fetches comparable sales from the Zillow API, applies property-
 specific adjustments, and produces a 7-tab Excel workbook.
 
-Tennessee is a non-disclosure state — MLS/Zillow data is the primary
+Ohio is a non-disclosure state — MLS/Zillow data is the primary
 source, not public deed records.
 
 Usage:
-  python src/main.py comp --address "123 Main St, Knoxville, TN 37918"
-  python src/main.py comp --address "123 Main St" --city Knoxville --zip 37918 --radius 0.5 --months 6
+  python src/main.py comp --address "123 Main St, Columbus, TN 37918"
+  python src/main.py comp --address "123 Main St" --city Columbus --zip 37918 --radius 0.5 --months 6
 """
 
 import logging
@@ -45,7 +45,7 @@ MIN_COMPS = 3
 TARGET_COMPS = 5
 MAX_COMPS = 7
 
-# ── Adjustment values (Knoxville regional calibration) ────────────────
+# ── Adjustment values (Columbus regional calibration) ────────────────
 # These are per-unit adjustment amounts used when a comp differs from subject
 ADJ_PER_SQFT = 85.0            # $ per sqft difference
 ADJ_PER_BEDROOM = 5000.0       # $ per bedroom difference
@@ -65,7 +65,7 @@ class SubjectProperty:
     """The property being analyzed."""
     address: str = ""
     city: str = ""
-    state: str = "TN"
+    state: str = "OH"
     zip_code: str = ""
     latitude: float = 0.0
     longitude: float = 0.0
@@ -88,7 +88,7 @@ class CompProperty:
     """A comparable property with sale data."""
     address: str = ""
     city: str = ""
-    state: str = "TN"
+    state: str = "OH"
     zip_code: str = ""
     latitude: float = 0.0
     longitude: float = 0.0
@@ -166,7 +166,7 @@ def _api_get(endpoint: str, params: dict, api_key: str) -> dict | None:
     return None
 
 
-def fetch_subject_property(address: str, city: str = "", state: str = "TN",
+def fetch_subject_property(address: str, city: str = "", state: str = "OH",
                            zip_code: str = "", api_key: str = "") -> SubjectProperty | None:
     """Fetch full property details for the subject property."""
     api_key = api_key or config.OPENWEBNINJA_API_KEY
@@ -275,7 +275,7 @@ def fetch_comparable_sales(subject: SubjectProperty, radius_miles: float = DEFAU
         comp = CompProperty(
             address=item.get("streetAddress") or item.get("address") or "",
             city=item.get("city") or "",
-            state=item.get("state") or "TN",
+            state=item.get("state") or "OH",
             zip_code=str(item.get("zipcode") or item.get("zip") or ""),
             latitude=lat,
             longitude=lon,
@@ -812,7 +812,7 @@ def generate_comp_report(subject: SubjectProperty, comps: list[CompProperty],
     ws6.cell(row=3, column=1, value="Methodology").font = _SUBTITLE_FONT
     ws6.cell(row=4, column=1, value="Bucket A (Non-Disclosure): 30% weight — Off-market/FSBO sales with limited price transparency").font = _LABEL_FONT
     ws6.cell(row=5, column=1, value="Bucket B (Disclosure/MLS): 70% weight — Agent-listed sales with confirmed pricing").font = _LABEL_FONT
-    ws6.cell(row=6, column=1, value="Tennessee is a non-disclosure state. All data sourced via Zillow/MLS.").font = _LABEL_FONT
+    ws6.cell(row=6, column=1, value="Ohio is a non-disclosure state. All data sourced via Zillow/MLS.").font = _LABEL_FONT
 
     ws6.cell(row=8, column=1, value="Bucket A Comps").font = _SUBTITLE_FONT
     bucket_a = [c for c in comps[:MAX_COMPS] if c.bucket == "A"]
@@ -876,7 +876,7 @@ def generate_comp_report(subject: SubjectProperty, comps: list[CompProperty],
         "A conservative ARV that comes in low leaves room for upside.",
         "",
         f"Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        f"Region: Knoxville / East Tennessee",
+        f"Region: Columbus / East Ohio",
     ]
     for i, note in enumerate(notes, 3):
         ws7.cell(row=i, column=1, value=note).font = _LABEL_FONT
@@ -891,7 +891,7 @@ def generate_comp_report(subject: SubjectProperty, comps: list[CompProperty],
 
 # ── Main entry point ──────────────────────────────────────────────────
 
-def run_comp_analysis(address: str, city: str = "", state: str = "TN",
+def run_comp_analysis(address: str, city: str = "", state: str = "OH",
                       zip_code: str = "", radius: float = DEFAULT_RADIUS_MILES,
                       months: int = DEFAULT_MONTHS_BACK,
                       output_path: str = "") -> dict:

@@ -15,7 +15,7 @@
         "counties": {
             "title": "Counties",
             "type": "array",
-            "description": "Counties to scrape. Leave empty for all (Knox + Blount).",
+            "description": "Counties to scrape. Leave empty for all (Franklin).",
             "items": { "type": "string" },
             "default": [],
             "editor": "stringList"

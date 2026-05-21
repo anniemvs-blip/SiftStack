@@ -259,7 +259,7 @@ async def close_browser(pw, context):
 # ── Search: SSDI ────────────────────────────────────────────────────
 
 
-async def _search_ssdi(page, first_name: str, last_name: str, state: str = "TN",
+async def _search_ssdi(page, first_name: str, last_name: str, state: str = "OH",
                        middle_initial: str = "", city: str = "") -> dict | None:
     """Search SSDI death index. Returns structured result or None."""
     if not _can_load_page() or _circuit_broken:
@@ -290,7 +290,7 @@ async def _search_ssdi(page, first_name: str, last_name: str, state: str = "TN",
     if state:
         loc_el = await page.query_selector("#sfs__SelfResidencePlace")
         if loc_el and await loc_el.is_visible():
-            state_name = {"TN": "Tennessee", "AL": "Alabama"}.get(state, state)
+            state_name = {"OH": "Ohio", "AL": "Alabama"}.get(state, state)
             await loc_el.fill(state_name)
             await _delay(1, 2)
             # Wait for autocomplete dropdown and select first match
@@ -383,7 +383,7 @@ async def _search_ssdi(page, first_name: str, last_name: str, state: str = "TN",
         return None
 
     # Quality gate: if we have city info, require county-level location match (score >= 2)
-    # to avoid matching a "Dora Wilson in Tipton County" when looking for "Dora Wilson in Knox County"
+    # to avoid matching a "Dora Wilson in Tipton County" when looking for "Dora Wilson in Franklin County"
     # Exception: globally unique names (1-2 total results) are safe even without county match
     if city and best_loc_score < 2:
         best_name = best.get("name", "")
@@ -430,7 +430,7 @@ async def _parse_ssdi_results(page) -> list[dict]:
       [1] Name (e.g., "John H Smith")
       [2] Birth Date (e.g., "x xxx xxxx" or "xx xxx 1940")
       [3] Death Date (e.g., "xx xxx 1996")
-      [4] Last Residence (e.g., "xxxxxxxxx Knox, Tennessee, USA")
+      [4] Last Residence (e.g., "xxxxxxxxx Franklin, Ohio, USA")
       [5] "Primary record"
 
     Dates are partially masked with x's — only year is visible.
@@ -499,7 +499,7 @@ async def _parse_ssdi_results(page) -> list[dict]:
 # ── Search: Ancestry obituary collection ────────────────────────────
 
 
-async def _search_obituaries(page, first_name: str, last_name: str, state: str = "TN",
+async def _search_obituaries(page, first_name: str, last_name: str, state: str = "OH",
                              city: str = "", middle_initial: str = "") -> dict | None:
     """Search Ancestry obituary collection via direct URL. Returns result or None."""
     if not _can_load_page() or _circuit_broken:
@@ -508,7 +508,7 @@ async def _search_obituaries(page, first_name: str, last_name: str, state: str =
     # Navigate directly to search results URL — bypasses SPA form issues
     # Category 34 = "Death, Burial, Cemetery & Obituaries"
     import urllib.parse
-    state_name = {"TN": "Tennessee", "AL": "Alabama"}.get(state, state)
+    state_name = {"OH": "Ohio", "AL": "Alabama"}.get(state, state)
     params = {
         "name": f"{first_name}_{last_name}",
         "birth": "",
@@ -624,12 +624,12 @@ async def _search_obituaries(page, first_name: str, last_name: str, state: str =
     }
 
 
-async def _search_newspapers(page, first_name: str, last_name: str, state: str = "TN",
+async def _search_newspapers(page, first_name: str, last_name: str, state: str = "OH",
                               city: str = "", middle_initial: str = "") -> dict | None:
     """Search Newspapers.com obituary index via All-Access SSO (Tier 3).
 
     Newspapers.com has 930M+ pages including recent TN obituaries from
-    Knoxville News Sentinel, The Daily Times (Blount), etc.
+    The Columbus Dispatch, ThisWeek Community News, etc.
     Shares SSO with Ancestry All-Access — no separate login needed.
     """
     if not _can_load_page() or _circuit_broken:
@@ -640,7 +640,7 @@ async def _search_newspapers(page, first_name: str, last_name: str, state: str =
     # Build search URL with obituary category filter
     # Newspapers.com search URL format: /search/?query=FIRSTNAME+LASTNAME&t=4268
     # t=4268 = Obituaries category (from the category dropdown)
-    state_abbr_to_full = {"TN": "Tennessee", "AL": "Alabama"}
+    state_abbr_to_full = {"OH": "Ohio", "AL": "Alabama"}
     state_full = state_abbr_to_full.get(state, state)
 
     query_parts = [first_name, last_name]
@@ -1003,7 +1003,7 @@ def _parse_result_row(text: str) -> dict | None:
     result = {"raw_text": text[:300]}
 
     # Extract name (usually first part)
-    # Ancestry results: "John Smith | Birth: 1940 | Death: 2020 | Tennessee"
+    # Ancestry results: "John Smith | Birth: 1940 | Death: 2020 | Ohio"
     parts = re.split(r"\s*[|·—]\s*", text)
     if parts:
         result["name"] = parts[0].strip()
@@ -1019,7 +1019,7 @@ def _parse_result_row(text: str) -> dict | None:
         result["birth_date"] = birth_match.group(1).strip()
 
     # Extract location
-    loc_match = re.search(r"(?:Tennessee|TN|Knoxville|Knox\s+County|Blount)", text, re.IGNORECASE)
+    loc_match = re.search(r"(?:Ohio|OH|Columbus|Franklin\s+County)", text, re.IGNORECASE)
     if loc_match:
         result["location"] = loc_match.group(0).strip()
 
@@ -1064,7 +1064,7 @@ def _name_matches(first: str, last: str, full_name: str, middle_initial: str = "
     return True
 
 
-def _location_matches(location: str, state: str = "TN", city: str = "") -> tuple[bool, int]:
+def _location_matches(location: str, state: str = "OH", city: str = "") -> tuple[bool, int]:
     """Check if an SSDI result location matches our target area.
 
     Returns (matches, score):
@@ -1073,7 +1073,7 @@ def _location_matches(location: str, state: str = "TN", city: str = "") -> tuple
     """
     loc_lower = location.lower().strip()
     state_names = {
-        "TN": "tennessee", "AL": "alabama", "GA": "georgia",
+        "OH": "ohio", "AL": "alabama", "GA": "georgia",
         "KY": "kentucky", "NC": "north carolina", "VA": "virginia",
     }
     state_name = state_names.get(state, state.lower())
@@ -1090,16 +1090,21 @@ def _location_matches(location: str, state: str = "TN", city: str = "") -> tuple
     score = 1
 
     # Check county/city match for extra confidence
-    # SSDI locations look like: "Knox, Tennessee, USA" or "Knoxville, Knox, Tennessee"
+    # SSDI locations look like: "Franklin, Ohio, USA" or "Columbus, Franklin, Ohio"
     city_lower = city.lower() if city else ""
-    # Map cities to counties for Knox/Blount area
+    # Map cities to counties for Franklin OH area
     county_aliases = {
-        "knoxville": ["knox"],
-        "farragut": ["knox"],
-        "powell": ["knox"],
-        "corryton": ["knox"],
-        "maryville": ["blount"],
-        "alcoa": ["blount"],
+        "columbus": ["franklin"],
+        "bexley": ["franklin"],
+        "dublin": ["franklin"],
+        "gahanna": ["franklin"],
+        "grove city": ["franklin"],
+        "hilliard": ["franklin"],
+        "reynoldsburg": ["franklin"],
+        "upper arlington": ["franklin"],
+        "westerville": ["franklin"],
+        "whitehall": ["franklin"],
+        "worthington": ["franklin"],
     }
 
     if city_lower:
@@ -1152,7 +1157,7 @@ async def lookup_deceased(
     page,
     name: str,
     city: str = "",
-    state: str = "TN",
+    state: str = "OH",
 ) -> dict | None:
     """Search Ancestry for a deceased person. Returns structured result or None.
 

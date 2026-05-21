@@ -4,7 +4,7 @@ Calculates MAO (Maximum Allowable Offer), ROI projections, holding costs,
 selling costs, and financing scenarios for flip/wholesale/hold strategies.
 
 Usage:
-  python src/main.py analyze-deal --address "123 Main St, Knoxville, TN 37918"
+  python src/main.py analyze-deal --address "123 Main St, Columbus, TN 37918"
   python src/main.py analyze-deal --address "123 Main St" --purchase-price 150000 --rehab-tier 2
 """
 
@@ -166,10 +166,10 @@ def _calc_monthly_payment(principal: float, annual_rate: float, months: int) -> 
 
 def _estimate_monthly_rent(arv: float, sqft: int, bedrooms: int) -> float:
     """Estimate monthly rent based on 1% rule and property characteristics."""
-    # 1% rule as baseline (conservative for Knoxville)
-    rent_pct_rule = arv * 0.008  # 0.8% for Knoxville (below 1% rule)
+    # 1% rule as baseline (conservative for Columbus)
+    rent_pct_rule = arv * 0.008  # 0.8% for Columbus (below 1% rule)
     # Sqft-based estimate
-    rent_sqft = sqft * 0.75 if sqft else 0  # ~$0.75/sqft for Knoxville
+    rent_sqft = sqft * 0.75 if sqft else 0  # ~$0.75/sqft for Columbus
     # Bedroom-based estimate
     rent_bed = 600 + (bedrooms * 200)  # base $600 + $200/bed
     # Average the estimates
@@ -675,7 +675,7 @@ def generate_deal_report(pkg: DealPackage, output_path: str = "") -> str:
 
 # ── Main entry point ──────────────────────────────────────────────────
 
-def run_deal_analysis(address: str, city: str = "", state: str = "TN",
+def run_deal_analysis(address: str, city: str = "", state: str = "OH",
                       zip_code: str = "", purchase_price: float = 0,
                       rehab_tier: int = 2, exit_strategy: str = "flip",
                       region: str = DEFAULT_REGION,

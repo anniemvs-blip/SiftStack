@@ -1991,7 +1991,7 @@ async def manage_sold_properties(
     the property actually sold (not the current date).
 
     Steps per county per month:
-    1. Search SiftMap by "Knox County, TN" (county-level search)
+    1. Search SiftMap by "Franklin County, TN" (county-level search)
     2. Set Last Sold Date filter: first day → last day of that month
     3. Use select-all checkbox + pagination to capture all results
     4. Add to account with "Sold" + "Sold YYYY-MM" tags
@@ -1999,7 +1999,7 @@ async def manage_sold_properties(
 
     Args:
         page: Logged-in Playwright page.
-        counties: Counties to search (default: ["Knox", "Blount"]).
+        counties: Counties to search (default: ["Franklin"]).
         months_back: How many months back to search for sales (default: 1).
         min_sale_price: Minimum sale price filter to exclude deed transfers.
         sold_tag_date: If set, overrides per-month tag (use for single-month runs).
@@ -2018,7 +2018,7 @@ async def manage_sold_properties(
         "month_details": [],
     }
 
-    counties = counties or ["Knox", "Blount"]
+    counties = counties or ["Franklin"]
 
     # Build list of (year, month) tuples to process — oldest first
     now = datetime.now()
@@ -2446,7 +2446,7 @@ async def _siftmap_search_sold(
 
     Args:
         page: Page already on SiftMap.
-        county: County name (e.g., "Knox").
+        county: County name (e.g., "Franklin").
         start_date: Start date MM/DD/YYYY (first day of month).
         end_date: End date MM/DD/YYYY (last day of month).
         min_sale_price: Minimum sale price filter.
@@ -2461,8 +2461,8 @@ async def _siftmap_search_sold(
 
     # County FIPS codes for TN counties
     COUNTY_FIPS = {
-        "Knox": "47093",
-        "Blount": "47009",
+        "Franklin": "47093",
+        "Franklin": "47009",
     }
 
     result = {"success": False, "records_added": 0, "message": ""}
@@ -2484,7 +2484,7 @@ async def _siftmap_search_sold(
             "searchType": "county",
             "title": f"{county} County, TN",
             "county": county,
-            "state": "TN",
+            "state": "OH",
             "counties": [{"fips": fips, "county_name": county}],
         })
 
@@ -2563,7 +2563,7 @@ async def run_manage_sold_workflow(
     Top-level orchestrator for the manage-sold CLI command.
 
     Args:
-        counties: Counties to search (default: Knox, Blount).
+        counties: Counties to search (default: Franklin).
         months_back: Months of sales to pull (default: 1).
         min_sale_price: Min sale price to exclude deed transfers (default: $1,000).
         sold_tag_date: Tag date YYYY-MM (default: current month).

@@ -1,11 +1,11 @@
 """Room-by-room rehab cost estimation with 4-tier finish system.
 
 Generates full rehab budgets, wholetail comparisons, and project timelines.
-Regional pricing calibrated for Knoxville / East Tennessee market.
+Regional pricing calibrated for Columbus / Central Ohio market.
 
 Usage:
-  python src/main.py rehab --address "123 Main St, Knoxville, TN 37918"
-  python src/main.py rehab --address "123 Main St" --tier 2 --scope full --region knoxville
+  python src/main.py rehab --address "123 Main St, Columbus,, OH 37918"
+  python src/main.py rehab --address "123 Main St" --tier 2 --scope full --region columbus
 """
 
 import logging
@@ -20,15 +20,14 @@ import config
 logger = logging.getLogger(__name__)
 
 # ── Regional multipliers ──────────────────────────────────────────────
-# Knoxville labor/materials costs relative to national average (1.0)
+# Columbus labor/materials costs relative to national average (1.0)
 REGIONAL_MULTIPLIERS = {
-    "knoxville": 0.88,      # ~12% below national average
-    "blount": 0.86,          # Slightly lower than Knox
+    "columbus": 0.88,      # ~12% below national average
     "national": 1.00,
     "nashville": 0.95,
     "chattanooga": 0.90,
 }
-DEFAULT_REGION = "knoxville"
+DEFAULT_REGION = "columbus"
 
 # ── 4-Tier Finish System ─────────────────────────────────────────────
 # Cost per sqft by tier (national average, before regional multiplier)
@@ -232,7 +231,7 @@ def estimate_rehab(address: str = "", sqft: int = 0, bedrooms: int = 3,
 
     # Default sqft if not provided
     if not sqft:
-        sqft = 1500  # Knoxville average for older SFH
+        sqft = 1500  # Columbus average for older SFH
 
     full_baths = int(bathrooms)
     secondary_baths = max(0, full_baths - 1)

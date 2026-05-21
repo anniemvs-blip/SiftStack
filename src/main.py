@@ -2,7 +2,7 @@
 
 Runs as either:
   - Apify Actor (when APIFY_IS_AT_HOME is set — reads input from Actor.get_input())
-  - Standalone CLI (python src/main.py daily --counties Knox --types foreclosure)
+  - Standalone CLI (python src/main.py daily --counties Franklin --types foreclosure)
 """
 
 import argparse
@@ -59,15 +59,19 @@ def _preflight_check(mode: str) -> list[str]:
     failures: list[str] = []
 
     # ── Credential checks (mode-dependent) ──────────────────────────
-    scrape_modes = {"daily", "historical"}
+    # Franklin OH scrape modes — no TNPN/2Captcha needed (direct county sources)
+    scrape_modes = {"daily", "historical", "oh-daily"}
     enrichment_modes = scrape_modes | {"pdf-import", "photo-import", "dropbox-watch", "csv-import"}
     datasift_modes = {"manage-presets", "manage-sold", "phone-validate"}
 
-    if mode in scrape_modes:
-        if not config.TNPN_EMAIL or not config.TNPN_PASSWORD:
-            failures.append("TNPN_EMAIL / TNPN_PASSWORD not set (required for scraping)")
-        if not config.CAPTCHA_API_KEY:
-            failures.append("CAPTCHA_API_KEY not set (CAPTCHA solving will fail)")
+    if mode in {"oh-daily"} or (mode in scrape_modes and config.FRANKLIN_OH_SHERIFF_USERNAME):
+        # Franklin OH scrape — needs Sheriff Auction credentials (warning only;
+        # other Franklin OH sources work without auth)
+        if not config.FRANKLIN_OH_SHERIFF_USERNAME or not config.FRANKLIN_OH_SHERIFF_PASSWORD:
+            logger.warning(
+                "Preflight: FRANKLIN_OH_SHERIFF_USERNAME / _PASSWORD missing — "
+                "foreclosure (Sheriff Auction) scraping will be skipped"
+            )
 
     if mode in enrichment_modes:
         # These are warnings, not blockers — pipeline degrades gracefully
@@ -90,36 +94,23 @@ def _preflight_check(mode: str) -> list[str]:
         if not config.TRESTLE_API_KEY:
             failures.append("TRESTLE_API_KEY not set (required for phone validation)")
 
-    # ── Connectivity checks (only for scrape modes) ─────────────────
-    if mode in scrape_modes:
+    # ── Connectivity checks (Franklin OH scrape modes) ──────────────
+    if mode in {"oh-daily"}:
         import requests as _requests
         try:
-            resp = _requests.head(config.BASE_URL, timeout=10, allow_redirects=True)
-            if resp.status_code >= 500:
-                failures.append(f"tnpublicnotice.com returned {resp.status_code} — site may be down")
-        except Exception as e:
-            failures.append(f"Cannot reach tnpublicnotice.com: {e}")
-
-    # ── 2Captcha balance check ──────────────────────────────────────
-    if mode in scrape_modes and config.CAPTCHA_API_KEY:
-        import requests as _requests
-        try:
-            resp = _requests.get(
-                f"https://2captcha.com/res.php?key={config.CAPTCHA_API_KEY}&action=getbalance",
+            resp = _requests.head(
+                "https://probatesearch.franklincountyohio.gov",
                 timeout=10,
+                allow_redirects=True,
             )
-            balance_text = resp.text.strip()
-            try:
-                balance = float(balance_text)
-                if balance < 0.50:
-                    failures.append(f"2Captcha balance too low: ${balance:.2f} (need at least $0.50)")
-                else:
-                    logger.info("Preflight: 2Captcha balance: $%.2f", balance)
-            except ValueError:
-                if "ERROR" in balance_text:
-                    failures.append(f"2Captcha API key invalid: {balance_text}")
+            if resp.status_code >= 500:
+                failures.append(
+                    f"Franklin County Probate ({resp.status_code}) — site may be down"
+                )
         except Exception as e:
-            logger.warning("Preflight: Could not check 2Captcha balance: %s", e)
+            logger.warning(
+                "Preflight: Could not reach Franklin Probate site: %s", e
+            )
 
     return failures
 
@@ -611,7 +602,7 @@ def _run_pdf_import(args) -> None:
         logging.error("PDF file not found: %s", pdf_path)
         sys.exit(1)
 
-    county = args.pdf_county.strip().title()  # "knox" → "Knox"
+    county = args.pdf_county.strip().title()  # "franklin" → "Franklin"
 
     api_key = config.ANTHROPIC_API_KEY or None
 
@@ -987,7 +978,7 @@ def _run_manage_sold(args) -> None:
     """Run the SiftMap sold properties management workflow."""
     from datasift_uploader import run_manage_sold_workflow
 
-    # Parse counties if provided, otherwise use default (Knox, Blount)
+    # Parse counties if provided, otherwise use default (Franklin)
     counties = None
     if args.counties and args.counties.lower() != "all":
         counties = [c.strip().title() for c in args.counties.split(",")]
@@ -1040,7 +1031,7 @@ def cli_main() -> None:
         "--counties",
         type=str,
         default=None,
-        help='Comma-separated counties to scrape (e.g. "Knox,Blount" or "all")',
+        help='Comma-separated counties to scrape (e.g. "Franklin" or "all")',
     )
     parser.add_argument(
         "--types",
@@ -1082,7 +1073,7 @@ def cli_main() -> None:
         "--pdf-county",
         type=str,
         default=None,
-        help='County name for PDF import, e.g. "Knox" (required for pdf-import mode)',
+        help='County name for PDF import, e.g. "Franklin" (required for pdf-import mode)',
     )
     parser.add_argument(
         "--pdf-date",
@@ -1107,7 +1098,7 @@ def cli_main() -> None:
         type=str,
         default=None,
         dest="photo_county",
-        help='County name for photo import, e.g. "Knox" (required for photo-import mode)',
+        help='County name for photo import, e.g. "Franklin" (required for photo-import mode)',
     )
     parser.add_argument(
         "--photo-type",
@@ -1160,7 +1151,7 @@ def cli_main() -> None:
         "--csv-county",
         type=str,
         default=None,
-        help='County name for CSV import, e.g. "Knox" (sets county for records missing it)',
+        help='County name for CSV import, e.g. "Franklin" (sets county for records missing it)',
     )
 
     parser.add_argument(
@@ -1379,8 +1370,8 @@ def cli_main() -> None:
                         help="Finish tier 1-4 (rehab mode, default: 2)")
     parser.add_argument("--scope", type=str, default="full", choices=["full", "wholetail"],
                         help="Rehab scope (rehab mode, default: full)")
-    parser.add_argument("--region", type=str, default="knoxville",
-                        help="Regional pricing (rehab mode, default: knoxville)")
+    parser.add_argument("--region", type=str, default="columbus",
+                        help="Regional pricing (rehab mode, default: columbus)")
     parser.add_argument("--sqft", type=int, default=0,
                         help="Property sqft override (rehab mode)")
     parser.add_argument("--bedrooms", type=int, default=0,
@@ -1438,7 +1429,7 @@ def cli_main() -> None:
     parser.add_argument("--blueprint", type=str, default="wholesale",
                         choices=["wholesale", "flip", "hold", "hybrid"],
                         help="Investment blueprint (playbook mode)")
-    parser.add_argument("--market", type=str, default="knoxville",
+    parser.add_argument("--market", type=str, default="columbus",
                         help="Target market (playbook mode)")
     parser.add_argument("--team-size", type=int, default=1,
                         help="Team size 1/2/5 (playbook mode)")

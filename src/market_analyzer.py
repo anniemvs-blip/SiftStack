@@ -9,7 +9,7 @@ Data sources:
   - Knox County Tax API (delinquency density)
 
 Usage:
-  python src/main.py market-analysis --counties Knox,Blount
+  python src/main.py market-analysis --counties Franklin
   python src/main.py market-analysis --counties Knox --zip-codes 37918,37919,37920
 """
 
@@ -32,18 +32,19 @@ import config
 
 logger = logging.getLogger(__name__)
 
-# ── Knox/Blount county zip codes ──────────────────────────────────────
-KNOX_ZIPS = [
-    "37901", "37902", "37909", "37912", "37914", "37915", "37916", "37917",
-    "37918", "37919", "37920", "37921", "37922", "37923", "37924", "37931",
-    "37932", "37934", "37938",
-]
-BLOUNT_ZIPS = [
-    "37801", "37803", "37804", "37853", "37882", "37886",
+# ── Franklin County, OH zip codes ─────────────────────────────────────
+# Covers Columbus + Bexley + UA + Dublin + Gahanna + Grove City + Hilliard +
+# Reynoldsburg + Westerville + Whitehall + Worthington + suburbs
+FRANKLIN_OH_ZIPS = [
+    "43004", "43017", "43026", "43054", "43068", "43081", "43085",
+    "43109", "43110", "43119", "43123", "43125", "43137", "43147",
+    "43201", "43202", "43203", "43204", "43205", "43206", "43207", "43209",
+    "43210", "43211", "43212", "43213", "43214", "43215", "43217", "43219",
+    "43220", "43221", "43222", "43223", "43224", "43227", "43228", "43229",
+    "43230", "43231", "43232", "43235", "43240", "43251", "43260",
 ]
 COUNTY_ZIPS = {
-    "knox": KNOX_ZIPS,
-    "blount": BLOUNT_ZIPS,
+    "franklin": FRANKLIN_OH_ZIPS,
 }
 
 # ── Scoring weights ───────────────────────────────────────────────────
@@ -435,7 +436,7 @@ def run_market_analysis(counties: list[str] | None = None,
 
     Returns dict with report data and output path.
     """
-    counties = counties or ["Knox", "Blount"]
+    counties = counties or ["Franklin"]
     county_str = ", ".join(counties)
     logger.info("Starting market analysis for: %s", county_str)
 

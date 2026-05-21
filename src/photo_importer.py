@@ -139,7 +139,7 @@ def process_photos(
 
     Args:
         folder: Path to folder containing JPG/PNG photos.
-        county: "Knox" or "Blount".
+        county: County name (e.g., "Franklin").
         notice_type: e.g. "eviction", "foreclosure", "tax_sale".
         date_added: Date string (YYYY-MM-DD). Defaults to today.
         api_key: Anthropic API key for LLM parsing.
@@ -215,7 +215,7 @@ def process_photos(
         notice = NoticeData(
             address=parsed.get("address", ""),
             city=parsed.get("city", ""),
-            state=parsed.get("state", "TN"),
+            state=parsed.get("state", "OH"),
             zip=parsed.get("zip", ""),
             owner_name=parsed.get("owner_name", ""),
             notice_type=notice_type,

@@ -43,7 +43,7 @@ ROW_RE = re.compile(
 )
 
 # LLM prompt template for structured extraction
-LLM_PROMPT = """You are parsing OCR text from a scanned tax sale property list for {county} County, Tennessee.
+LLM_PROMPT = """You are parsing OCR text from a scanned tax sale property list for {county} County, Ohio.
 The table has these columns (left to right):
 1. Row number (may be missing or garbled — ignore it)
 2. Parcel ID (format: digits, optional letters, dash, digits — e.g. "003-04913", "005LB-00801", "018AA-022")
@@ -218,7 +218,7 @@ def process_pdf(
 
     Args:
         pdf_path: Path to the PDF file.
-        county: "Knox" or "Blount".
+        county: County name (e.g., "Franklin").
         api_key: Anthropic API key for LLM parsing (optional).
         date_added: Date string (YYYY-MM-DD) for records. Defaults to today.
         regex_only: If True, skip LLM and use regex only.
@@ -229,7 +229,7 @@ def process_pdf(
     if date_added is None:
         date_added = datetime.now().strftime("%Y-%m-%d")
 
-    default_city = "Knoxville" if county.lower() == "knox" else "Maryville"
+    default_city = "Columbus"
     use_llm = api_key and not regex_only
 
     logger.info("Processing PDF: %s (%s County)", pdf_path.name, county)
@@ -272,7 +272,7 @@ def process_pdf(
         notice = NoticeData(
             address=row["address"],
             city=default_city,
-            state="TN",
+            state="OH",
             owner_name=row.get("owner_name", ""),
             notice_type="tax_sale",
             county=county,

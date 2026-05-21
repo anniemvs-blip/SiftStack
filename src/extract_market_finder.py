@@ -7,9 +7,9 @@ IMPORTANT: Always extracts EVERY row — scrolls through infinite-scroll
 tables until no new rows appear. Never truncate or stop at visible rows.
 
 Usage:
-    python src/extract_market_finder.py --state "Tennessee" --county "Knox"
-    python src/extract_market_finder.py --state "Tennessee" --county "Knox" --headless
-    python src/extract_market_finder.py --state "Tennessee" --county "Knox,Blount"
+    python src/extract_market_finder.py --state "Ohio" --county "Franklin"
+    python src/extract_market_finder.py --state "Ohio" --county "Franklin" --headless
+    python src/extract_market_finder.py --state "Ohio" --county "Franklin"
 
 Output: JSON file(s) in --output-dir with extracted market data.
 
@@ -305,12 +305,12 @@ async def _select_state(page, state: str) -> bool:
                 await page.wait_for_timeout(500)
 
         # Strategy 5: Click on the state on the map
-        logger.info("Trying to click on Tennessee on the US map")
-        tn_on_map = page.locator('path[data-name="Tennessee"], path[title="Tennessee"]')
+        logger.info("Trying to click on Ohio on the US map")
+        tn_on_map = page.locator('path[data-name="Ohio"], path[title="Ohio"]')
         if await tn_on_map.count() > 0:
             await tn_on_map.first.click()
             await page.wait_for_timeout(3000)
-            logger.info("Clicked Tennessee on map")
+            logger.info("Clicked Ohio on map")
             return True
 
         # Strategy 6: Try using JS to click by evaluating all clickable elements
@@ -824,12 +824,12 @@ def main():
         description="Extract Market Finder data from DataSift.ai"
     )
     parser.add_argument(
-        "--state", required=True, help="State name (e.g., Tennessee)"
+        "--state", required=True, help="State name (e.g., Ohio)"
     )
     parser.add_argument(
         "--county",
         required=True,
-        help="County name(s), comma-separated (e.g., Knox or Knox,Blount)",
+        help="County name(s), comma-separated (e.g., Franklin)",
     )
     parser.add_argument(
         "--headless",

@@ -6,15 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **SiftStack** — Full-stack real estate investing operations platform built around DataSift.ai CRM. Covers the entire REI business lifecycle:
 
-1. **Data Acquisition:** Web scraping tnpublicnotice.com (foreclosures, tax sales, probates), scanned PDF import, courthouse terminal photo import (probate, eviction, code violations, divorce), Dropbox auto-polling
-2. **Enrichment Pipeline:** 10+ steps — Smarty address standardization, Zillow property data, Knox County Tax API, obituary/heir research, Ancestry.com SSDI, Tracerfy skip trace, Trestle phone scoring, entity research
+1. **Data Acquisition:** Web scraping Franklin County OH sources (sheriff foreclosures via RealForeclose, probate court, treasurer tax liens), scanned PDF import, courthouse terminal photo import (probate, eviction, code violations, divorce), Dropbox auto-polling
+2. **Enrichment Pipeline:** 10+ steps — Smarty address standardization, Zillow property data, Franklin County Auditor API, obituary/heir research, Ancestry.com SSDI, Tracerfy skip trace, Trestle phone scoring, entity research
 3. **Deal Analysis:** Comparable sales (Two-Bucket ARV), rehab estimation (4-tier room-by-room), deal analyzer (MAO/ROI/financing scenarios)
 4. **Market Intelligence:** Zip code scoring, Market Finder reports, cash buyer list building, investor portfolio analysis
 5. **CRM Automation:** DataSift upload, 26 TCA sequence templates, 12 niche sequential marketing presets, filter preset management, SiftMap sold property tagging
 6. **Lead Management:** 4 Pillars of Motivation auto-qualification, STABM daily routine, pipeline reporting, deep prospecting (4-level framework)
 7. **Operations:** Acquisition playbook generator (SOPs, scripts, checklists), Slack/Discord notifications, Google Drive upload, Apify Actor deployment
 
-Currently focused on Knox and Blount counties, Tennessee.
+Currently focused on Franklin County, Ohio.
 
 8. **REI Skill Library:** 13 Claude Co-Work skill files (`.skill`/`.plugin` ZIPs) for distribution to DataSift community via [learn.datasift.ai/claude-skills-rei](https://learn.datasift.ai/claude-skills-rei). Skills teach Claude specific REI workflows when uploaded to Co-Work sessions or Projects.
 
@@ -26,11 +26,16 @@ pip install -r requirements.txt
 playwright install chromium
 cp .env.example .env  # then fill in credentials
 
-# Run
+# Run (Franklin County, OH — recommended path)
+python src/main.py oh-daily                       # daily scrape: probate + tax sale + foreclosure
+python src/main.py oh-daily --types probate       # restrict to a single notice type
+python src/main.py oh-daily -v                    # verbose/debug logging
+
+# Legacy modes (Tennessee scraper path — kept as dead code, not used for OH)
 python src/main.py daily                          # new notices since last run
 python src/main.py historical                     # last 12 months of data
 python src/main.py daily --split                  # separate CSV per county+type
-python src/main.py daily --counties Knox          # only Knox county
+python src/main.py daily --counties Franklin      # legacy filter syntax
 python src/main.py daily --types foreclosure,probate  # only specific types
 python src/main.py daily -v                       # verbose/debug logging
 
@@ -42,11 +47,11 @@ python src/main.py manage-presets --all                           # discovery + 
 
 # SiftMap sold property tagging
 python src/main.py manage-sold --months-back 12                   # tag sold properties (last 12 months)
-python src/main.py manage-sold --counties Knox --min-sale-price 5000
+python src/main.py manage-sold --counties Franklin --min-sale-price 5000
 
 # Courthouse photo import (build 1.0.28+)
-python src/main.py photo-import --folder ./photos --photo-county Knox --photo-type probate
-python src/main.py photo-import --folder ./photos --photo-county Knox --photo-type eviction --skip-obituary
+python src/main.py photo-import --folder ./photos --photo-county Franklin --photo-type probate
+python src/main.py photo-import --folder ./photos --photo-county Franklin --photo-type eviction --skip-obituary
 python src/main.py dropbox-watch                                  # auto-poll Dropbox for new photos
 python src/main.py dropbox-watch --poll-interval 300 --max-polls 5  # 5-min interval, 5 cycles
 python src/main.py dropbox-watch --no-delete                      # keep photos in Dropbox after processing
@@ -61,7 +66,7 @@ All source files are in `src/` and imports assume `src/` is the working director
 - **PDF import:** `main.py` → `pdf_importer.py` (pypdfium2 → `image_utils.py` OCR) → enrichment → CSV
 - **Photo import:** `main.py` → `photo_importer.py` (OpenCV → `image_utils.py` OCR → `llm_parser.py`) → enrichment → CSV
 - **Dropbox watch:** `dropbox_watcher.py` → `photo_importer.py` → enrichment → CSV (auto-polling loop)
-- **Market Finder:** `extract_market_finder.py` → DataSift Market Finder (Playwright) → paginate all ZIP + neighborhood data → JSON → `generate_knox_report.py` → 7-sheet Excel
+- **Market Finder:** `extract_market_finder.py` → DataSift Market Finder (Playwright) → paginate all ZIP + neighborhood data → JSON → market report script → 7-sheet Excel
 
 - **main.py** — CLI entry point. Parses args (`daily`/`historical`, `--split`, `--counties`, `--types`, `-v`). Filters saved searches by county/type, orchestrates scrape → dedup → export, logs run summary stats.
 - **scraper.py** — Playwright browser automation. Reuses saved session cookies when possible, falls back to fresh login. Selects each saved search from the Smart Search dropdown (triggers ASP.NET postback), paginates results (50/page max), clicks each View button to open notice detail pages. Uses `last_run.json` for daily mode state, `cookies.json` for session persistence.
@@ -72,7 +77,7 @@ All source files are in `src/` and imports assume `src/` is the working director
 - **config.py** — Credentials (from `.env`), ASP.NET element selectors, saved search definitions, rate limiting constants, paths, image processing thresholds.
 - **image_utils.py** — Shared OCR utilities used by both `pdf_importer.py` and `photo_importer.py`. Exports `fix_rotation()` (Tesseract OSD) and `ocr_page(image, psm)` with configurable page segmentation mode. Handles Tesseract binary detection.
 - **photo_importer.py** — Courthouse phone photo import. OpenCV preprocessing chain (EXIF transpose → blur check → bilateral filter → perspective correction → Otsu threshold) → Tesseract OCR (PSM 4) → LLM parsing → NoticeData. Supports all 7 notice types.
-- **dropbox_watcher.py** — Cursor-based Dropbox folder polling. Downloads new photos, resolves county + notice_type from folder path (`/Knox/eviction/photo.jpg`), processes through photo_importer, deletes from Dropbox after success. State persisted to `dropbox_state.json` + `photo_state.json`.
+- **dropbox_watcher.py** — Cursor-based Dropbox folder polling. Downloads new photos, resolves county + notice_type from folder path (`/Franklin/eviction/photo.jpg`), processes through photo_importer, deletes from Dropbox after success. State persisted to `dropbox_state.json` + `photo_state.json`.
 - **report_generator.py** — Generates per-record PDF deep prospecting reports using reportlab. Includes property summary, signing chain with phone tiers, valuation, deceased owner detection. Output to `output/reports/`.
 - **extract_market_finder.py** — Playwright automation to extract ALL ZIP code + neighborhood data from DataSift Market Finder. Handles styled-component dropdowns, pagination (20 rows/page), Beamer popup dismissal. Outputs JSON. See "Market Finder Extraction Patterns" below.
 - **market_analyzer.py** — ZIP code scoring engine. 6-factor weighted composite (Distress 30%, Value 20%, Equity 15%, Tax Delinquency 15%, Competition 10%, DOM 10%). Grades A/B/C/D, budget allocation across top ZIPs. Reads from scraped notice CSVs in `output/`.
@@ -84,12 +89,14 @@ The site is **ASP.NET WebForms** — all navigation uses `__doPostBack()` with V
 
 **reCAPTCHA v2 is required on every single notice detail page**, even when logged in. There is no CAPTCHA on login, search, or results pages. The sitekey is hardcoded in `config.py`.
 
-## Saved Searches
+## Data Sources (Franklin County, OH)
 
-8 searches defined in `config.py` as `SAVED_SEARCHES`. Each maps to an exact dropdown option name on the Smart Search dashboard:
-- Knox & Blount × (Foreclosure V2, Tax Sale V2, Tax Delinquent V2, Probate V2)
+Franklin County OH uses direct county/court sources rather than a unified notice portal. Handled by `src/oh_franklin_scraper.py`:
+- **Foreclosures:** RealForeclose sheriff sales (Franklin County Sheriff Auction)
+- **Probates:** Franklin County Probate Court NetData
+- **Tax liens:** Franklin County Treasurer tax lien list
 
-Filterable via `--counties` and `--types` CLI args (comma-separated, or omit for all).
+Filterable via `--counties Franklin` and `--types` CLI args (comma-separated, or omit for all).
 
 ## Key Domain Rules
 
@@ -141,7 +148,7 @@ apify push
 
 ## Courthouse Photo Pipeline (build 1.0.28+)
 
-Courthouse terminal photos → OCR → LLM parse → enrichment → DataSift. Runner takes phone photos at Knox/Blount county terminals, uploads to Dropbox organized as `{county}/{notice_type}/`, system auto-processes.
+Courthouse terminal photos → OCR → LLM parse → enrichment → DataSift. Runner takes phone photos at Franklin County courthouse terminals, uploads to Dropbox organized as `{county}/{notice_type}/`, system auto-processes.
 
 ### Notice Types (7 total)
 - `foreclosure`, `tax_sale`, `tax_delinquent`, `probate` — existing from web scraper
@@ -162,14 +169,14 @@ Courthouse terminal photos → OCR → LLM parse → enrichment → DataSift. Ru
 Courthouse probate records have decedent name + PR/executor name but NO property address. Multi-tier lookup fills the gap:
 
 **Property Address Lookup** (Step 3c in enrichment pipeline):
-1. **Tier 1: Knox Tax API name search** — search `/parcels/{decedent_name}`, score by token overlap (FIRST MIDDLE LAST → LAST FIRST MIDDLE), accept >= 0.4 match. Tries multiple name variations (with/without suffix, LAST FIRST format, first+last only).
-2. **Tier 2: Executor family search** — search Knox Tax API by executor name, look for properties where decedent's last name appears in owner field (family property transferred to executor).
-3. **Tier 3: People search** — search TruePeopleSearch/FastPeopleSearch for decedent's last known Knox County address.
+1. **Tier 1: Franklin County Auditor API name search** — search `/parcels/{decedent_name}`, score by token overlap (FIRST MIDDLE LAST → LAST FIRST MIDDLE), accept >= 0.4 match. Tries multiple name variations (with/without suffix, LAST FIRST format, first+last only).
+2. **Tier 2: Executor family search** — search Franklin County Auditor API by executor name, look for properties where decedent's last name appears in owner field (family property transferred to executor).
+3. **Tier 3: People search** — search TruePeopleSearch/FastPeopleSearch for decedent's last known Franklin County address.
 
 **Probate Preset** (obituary enricher):
 - Triggers when court record has PR name + decedent name (no address required) — prevents wrong obituary from overriding court-named executor
 - Sets DM = the named PR/executor directly, skips obituary search entirely
-- Then runs DM address lookup (Knox Tax API → People Search → Tracerfy)
+- Then runs DM address lookup (Franklin County Auditor API → People Search → Tracerfy)
 
 **DOD Sanity Check** (obituary enricher):
 - Rejects obituary matches where DOD is > 3 years before the notice filing date (`MAX_DOD_GAP_YEARS = 3`)
@@ -179,15 +186,13 @@ Courthouse probate records have decedent name + PR/executor name but NO property
 ### Dropbox Folder Structure
 ```
 {DROPBOX_ROOT_FOLDER}/
-├── Knox/
-│   ├── eviction/
-│   ├── code_violation/
-│   ├── divorce/
-│   ├── foreclosure/
-│   ├── tax_sale/
-│   └── probate/
-└── Blount/
-    └── (same subfolders)
+└── Franklin/
+    ├── eviction/
+    ├── code_violation/
+    ├── divorce/
+    ├── foreclosure/
+    ├── tax_sale/
+    └── probate/
 ```
 
 ### Environment Variables
@@ -195,7 +200,7 @@ Courthouse probate records have decedent name + PR/executor name but NO property
 - `DROPBOX_APP_SECRET` — Dropbox OAuth2 app secret
 - `DROPBOX_REFRESH_TOKEN` — Dropbox offline refresh token (auto-rotates access tokens)
 - `DROPBOX_POLL_INTERVAL` — seconds between polls (default 900 = 15 min)
-- `DROPBOX_ROOT_FOLDER` — root folder path in Dropbox (e.g., "TN Public Notice")
+- `DROPBOX_ROOT_FOLDER` — root folder path in Dropbox (e.g., "Franklin County Notices")
 
 ### Dependencies (added to requirements.txt)
 - `opencv-python-headless>=4.13.0` — image preprocessing (headless = no GUI, saves 26MB in Docker)
@@ -239,7 +244,7 @@ DataSift's niche sequential system uses filter presets to guide records through 
 - Only core address fields (Property Street, City, State, ZIP) reliably auto-map
 - Tags, Lists, Estimated Value, and enrichment columns often stay unmapped in step 4
 - Notes and MSL Status sometimes auto-map
-- Custom fields (TN Public Notice group) require drag-and-drop mapping
+- Custom fields (Franklin County group in DataSift) require drag-and-drop mapping
 
 ### Contact Logic
 - **Deceased owners:** Contact = decision maker (first/last name + mailing address from DM)
@@ -323,7 +328,7 @@ Hard-won patterns from build 1.0.22-1.0.23 (SiftMap, preset management, sequence
 - "Sold Property Cleanup" sequence exists in Transactions folder (build 1.0.23): Trigger (Property Tags Added) → Condition (Sold) → Actions (Status→Sold, Remove Lists, Clear Tasks, Clear Assignee)
 
 **SiftMap Automation**
-- Search by city (NOT county): Knox → "Knoxville, TN", Blount → "Maryville, TN"
+- Search by city (NOT county): Franklin → "Columbus, OH"
 - PropertyDetails panel auto-opens on search — remove from DOM before other interactions
 - "Add Records to Account" modal: toggle OFF "Do not replace owners", add tags, dismiss dropdown by clicking heading (NOT Escape — clears tags)
 - Known limitation: SiftMap filters (price, date) set values visually but don't trigger React re-query. Only sidebar-visible properties (~3-5) get added per run
@@ -333,7 +338,7 @@ Hard-won patterns from build 1.0.22-1.0.23 (SiftMap, preset management, sequence
 Hard-won patterns from building `extract_market_finder.py`. The Market Finder UI differs significantly from the rest of DataSift.
 
 - **NO HTML `<table>` element** — data table is entirely div-based: `Tablestyles__TableContainer` → `TableRow` → `TableCell` (styled-components). Searching for `<table>` or `<tr>/<td>` finds nothing.
-- **PAGINATION, not infinite scroll** — table shows 20 rows per page with "1-20 of N" text and `PaginationInnerContainer` with prev/next `<button>` elements. Must click through ALL pages to get complete data. Knox County has 48 ZIPs (3 pages) and 120+ neighborhoods (7 pages).
+- **PAGINATION, not infinite scroll** — table shows 20 rows per page with "1-20 of N" text and `PaginationInnerContainer` with prev/next `<button>` elements. Must click through ALL pages to get complete data. Franklin County OH has ~80 ZIPs and 200+ neighborhoods (verify page counts on first run).
 - **State/County selection uses `InputMultiSearch`** — NOT styled-component Select dropdowns. Inputs have placeholders: `"Select States"`, `"Select Counties"`, `"Select ZIP Codes"`. Click input → type name → click dropdown result item (`[class*="Item"]:has-text("...")`).
 - **ZIP/Neighborhood toggle is a styled Select dropdown** — at the top bar with `Selectstyles__SelectValue` showing current view. Check the displayed text BEFORE clicking — if already on the correct view, clicking toggles AWAY from it. Only click to switch if the displayed text doesn't match the desired view.
 - **Beamer push modal (`#beamerPushModal`)** — appears on fresh login, blocks ALL pointer events. Different from the NPS survey (`#npsIframeContainer`). Both must be removed from DOM before any click interactions. Always call dismiss with `force=True` as fallback.
@@ -342,8 +347,8 @@ Hard-won patterns from building `extract_market_finder.py`. The Market Finder UI
 
 ```bash
 # Extract all Market Finder data for a county
-python src/extract_market_finder.py --state "Tennessee" --county "Knox" -v
-python src/extract_market_finder.py --state "Tennessee" --county "Knox,Blount" --headless
+python src/extract_market_finder.py --state "Ohio" --county "Franklin" -v
+python src/extract_market_finder.py --state "Ohio" --county "Franklin" --headless
 
 # Output: JSON file in output/market_finder_{state}_{county}_{timestamp}.json
 ```
@@ -387,7 +392,7 @@ These values are identical across all skills that reference them:
 - **HML points corrected** from 0% to 2% in deal-analyzer (matched to `deal_analyzer.py DEFAULT_HARD_MONEY_POINTS`)
 - **Linux paths fixed** in sequential-presets (was `/home/ubuntu/skills/...`, now relative)
 - **Preset names aligned** across 3 skills to match `niche_sequential.py` source code
-- **Transfer tax labeled** as Tennessee-specific in deal-analyzer with state reference table for top 10 states
+- **Transfer tax labeled** as state-specific in deal-analyzer with reference table for top 10 states (Ohio conveyance fee now applies)
 - **"Substantial renovation" defined** in real-estate-comping: kitchen + 1 bath minimum (~$15K spend)
 
 ### Skill File Structure
@@ -411,3 +416,13 @@ plugin-name.plugin (ZIP containing):
 │       └── references/
 └── README.md
 ```
+
+## My Defaults
+
+- **Primary county:** Franklin County, OH
+- **Preferred run time:** 8:00 AM
+- **Disposition DataSift List name:** Claude Test
+- **Recommended scrape command:** `python src/main.py oh-daily` (skips TN preflight, runs Franklin OH scrapers directly)
+- **TN code paths:** Left in repo as dead code (`scraper.py`, `captcha_solver.py`, `foreclosure_filter.py`, `tax_enricher.py` Knox API, `property_lookup.py` KGIS/TPAD). Not called for OH; do not propose using them.
+- **Foreclosure source priority:** Recorder lis pendens (Phase 2 build) > Sheriff Auction (existing wired backstop). Don't suggest Sheriff Auction as primary — see foreclosure_priority memory.
+

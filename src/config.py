@@ -116,11 +116,10 @@ class SavedSearch:
 
 
 # ── Saved Searches ─────────────────────────────────────────────────────
-# These names must match exactly what appears in the dropdown on the site.
-SAVED_SEARCHES: list[SavedSearch] = [
-    SavedSearch("Knox", "foreclosure", "Foreclosure V2 Knox"),
-    SavedSearch("Blount", "foreclosure", "Foreclosure V2 Blount"),
-]
+# Legacy: TNPN scraper saved-search names. Not used for Franklin OH operation
+# (Franklin OH uses direct county/court sources via oh_franklin_scraper.py).
+# Kept as empty list to disable the TNPN path entirely.
+SAVED_SEARCHES: list[SavedSearch] = []
 
 # ── Entity Detection ──────────────────────────────────────────────────
 # Business entity patterns — shared across obituary_enricher, tax_enricher,

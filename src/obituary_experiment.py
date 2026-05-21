@@ -55,9 +55,9 @@ def ground_truth_to_notices(records: list[dict]) -> list[NoticeData]:
         n.owner_name = r["owner_name"]
         n.address = r["address"]
         n.city = r["city"]
-        n.state = r.get("state", "TN")
+        n.state = r.get("state", "OH")
         n.zip = r.get("zip", "")
-        n.county = r.get("county", "Knox")
+        n.county = r.get("county", "Franklin")
         n.notice_type = "foreclosure"
         # Clear any deceased fields — pipeline should re-discover them
         n.owner_deceased = ""

@@ -229,7 +229,7 @@ def _build_tags(notice: NoticeData) -> str:
     Tags include:
     - Courthouse Data (all records — for niche sequential filter presets)
     - notice_type (foreclosure, tax_sale, probate, tax_delinquent)
-    - county (knox, blount)
+    - county (franklin)
     - YYYY-MM date tag
     - deceased/living status
     - DM confidence level (for deceased records)
@@ -440,7 +440,7 @@ def _build_heir_summary(notice: NoticeData) -> str:
             street = h.get("street", "")
             if street:
                 city = h.get("city", "")
-                state = h.get("state", "TN")
+                state = h.get("state", "OH")
                 zip_code = h.get("zip", "")
                 addr_parts = [street]
                 if city:
@@ -704,7 +704,7 @@ def _build_row(notice: NoticeData, notes_override: str | None = None) -> dict:
         # ── Core auto-mapped ──
         "Property Street Address": notice.address,
         "Property City": notice.city,
-        "Property State": notice.state or "TN",
+        "Property State": notice.state or "OH",
         "Property ZIP Code": notice.zip,
         "Owner First Name": contact["first"],
         "Owner Last Name": contact["last"],

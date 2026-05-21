@@ -32,7 +32,7 @@ class NoticeData:
     auction_date: str = ""     # Scheduled sale/auction date (YYYY-MM-DD)
     address: str = ""
     city: str = ""
-    state: str = "TN"
+    state: str = "OH"
     zip: str = ""
     owner_name: str = ""
     notice_type: str = ""      # foreclosure | tax_sale | tax_lien | probate
@@ -134,24 +134,23 @@ class NoticeData:
     run_id: str = ""                   # Unique pipeline run identifier for data lineage
 
 
-# ── Known TN cities in Knox & Blount counties ─────────────────────────
-# Sorted longest-first so "Lenoir City" matches before "City"
-TN_CITIES: list[str] = sorted(
+# ── Known Franklin County, OH cities and villages ──────────────────────
+# Sorted longest-first so "Canal Winchester" matches before "Canal"
+FRANKLIN_OH_CITIES: list[str] = sorted(
     [
-        "Knoxville", "Maryville", "Alcoa", "Farragut", "Powell",
-        "Lenoir City", "Loudon", "Oak Ridge", "Clinton", "Sevierville",
-        "Pigeon Forge", "Gatlinburg", "Karns", "Halls", "Concord",
-        "Friendsville", "Louisville", "Townsend", "Walland", "Rockford",
-        "Corryton", "Mascot", "Strawberry Plains", "New Market",
-        "Kodak", "Dandridge", "Bean Station", "Jefferson City",
-        "Morristown", "Madisonville", "Vonore", "Greenback",
+        "Columbus", "Bexley", "Canal Winchester", "Dublin", "Gahanna",
+        "Grandview Heights", "Grove City", "Hilliard", "New Albany",
+        "Obetz", "Reynoldsburg", "Upper Arlington", "Westerville",
+        "Whitehall", "Worthington", "Marble Cliff", "Minerva Park",
+        "Riverlea", "Urbancrest", "Valleyview", "Lockbourne", "Galloway",
+        "Brice", "Harrisburg", "Groveport",
     ],
     key=len,
     reverse=True,
 )
 
 # Set version for O(1) membership tests in standalone address validation
-_KNOWN_CITIES_SET: set[str] = {c.title() for c in TN_CITIES}
+_KNOWN_CITIES_SET: set[str] = {c.title() for c in FRANKLIN_OH_CITIES}
 
 # ── Reusable suffix pattern ──────────────────────────────────────────
 # Word-boundary at the end prevents matching "Cir" inside "Circuit", etc.
@@ -202,10 +201,10 @@ _PROP_INDICATOR = (
     r")"
 )
 
-# Optional ", Knox County" or ", Blount County" between city and state
+# Optional ", Franklin County" between city and state
 _OPTIONAL_COUNTY = r"(?:\s*[,.]\s*\w+\s+County)?"
 
-# FULL match: indicator + address + city + [county] + Tennessee/TN + zip
+# FULL match: indicator + address + city + [county] + Ohio/OH + zip
 # Captures (address, city, zip) all from the same context.
 FULL_PROPERTY_RE = re.compile(
     _PROP_INDICATOR
@@ -216,7 +215,7 @@ FULL_PROPERTY_RE = re.compile(
     + r"([\w][\w\s]*?)"           # city name
     + _OPTIONAL_COUNTY
     + r"\s*[,.]\s*"
-    + r"(?:Tennessee|Tenn\.?|TN)"
+    + r"(?:Ohio|Oh\.?|OH)"
     + r"\s*[,.\s]*"
     + r"(\d{5}(?:-\d{4})?)?",     # optional zip
     re.IGNORECASE,
@@ -228,7 +227,7 @@ PROPERTY_ADDR_RE = re.compile(
     re.IGNORECASE,
 )
 
-# "located at ADDRESS, CITY, TN ZIP" — secondary, used for tax sales
+# "located at ADDRESS, CITY, OH ZIP" — secondary, used for tax sales
 # We validate the result against the blacklist to filter auction locations.
 LOCATED_AT_FULL_RE = re.compile(
     r"located\s+at\s+"
@@ -237,7 +236,7 @@ LOCATED_AT_FULL_RE = re.compile(
     + r"([\w][\w\s]*?)"
     + _OPTIONAL_COUNTY
     + r"\s*[,.]\s*"
-    + r"(?:Tennessee|Tenn\.?|TN)"
+    + r"(?:Ohio|Oh\.?|OH)"
     + r"\s*[,.\s]*"
     + r"(\d{5}(?:-\d{4})?)?",
     re.IGNORECASE,
@@ -248,7 +247,7 @@ LOCATED_AT_ADDR_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Standalone "ADDRESS, CITY, TN ZIP" — no indicator phrase required.
+# Standalone "ADDRESS, CITY, OH ZIP" — no indicator phrase required.
 # Only used for tax_sale / tax_lien notices as a last resort before giving up.
 STANDALONE_ADDR_RE = re.compile(
     _ADDR_PART
@@ -256,7 +255,7 @@ STANDALONE_ADDR_RE = re.compile(
     + r"([\w][\w\s]*?)"           # city name
     + _OPTIONAL_COUNTY
     + r"\s*[,.]\s*"
-    + r"(?:Tennessee|Tenn\.?|TN)"
+    + r"(?:Ohio|Oh\.?|OH)"
     + r"\s*[,.\s]*"
     + r"(\d{5}(?:-\d{4})?)?",     # optional zip
     re.IGNORECASE,
@@ -273,17 +272,18 @@ _BAD_ADDR_WORDS = [
 
 # Known government / courthouse addresses (normalized lowercase)
 _KNOWN_BAD_ADDRS = [
-    "400 main street",      # Knox County City-County Building
-    "400 main avenue",
-    "400 main ave",
-    "400 w main",
-    "345 court street",     # Blount County courthouse area
-    "345 court st",
-    "800 s gay st",         # Downtown Knoxville (law offices)
-    "800 s. gay st",
-    "800 south gay",
-    "300 main street",      # Blount County courthouse
-    "300 main st",
+    "373 s high st",        # Franklin Co. Common Pleas Court (Hall of Justice)
+    "373 s. high st",
+    "373 south high",
+    "375 s high st",        # Franklin Co. Common Pleas Court (Eaton Building)
+    "375 s. high st",
+    "375 south high",
+    "345 s high st",        # Franklin Co. Municipal Court
+    "345 s. high st",
+    "345 south high",
+    "410 s high st",        # Franklin Co. Probate Court
+    "410 s. high st",
+    "410 south high",
 ]
 
 
@@ -315,24 +315,23 @@ def _is_valid_address(addr: str) -> bool:
     return True
 
 
-# ── TN zip code ──────────────────────────────────────────────────────
-# TN zips range from 37010 to 38589 — require 37xxx or 38xxx prefix
-ZIP_RE = re.compile(r"\b(3[78]\d{3})(?:-\d{4})?\b")
+# ── OH zip code ──────────────────────────────────────────────────────
+# OH zips range from 43000 to 45999 — require 43xxx, 44xxx, or 45xxx prefix
+ZIP_RE = re.compile(r"\b(4[345]\d{3})(?:-\d{4})?\b")
 
 # Zips to reject when found via fallback (no address context):
 # Courthouse / auction / law-office zips that commonly appear in notice text
 _COURTHOUSE_ZIPS = {
-    "37902",  # Downtown Knoxville (courthouse, City-County Building)
-    "37901",  # Knoxville PO Box area
-    "38103",  # Memphis (law firms often referenced)
-    "38101",  # Memphis PO Box area
-    "37219",  # Nashville (state offices)
+    "43215",  # Downtown Columbus (Franklin Co. courthouses, law offices)
+    "43216",  # Columbus PO Box area
+    "43266",  # State of Ohio offices
+    "44113",  # Downtown Cleveland (law firms often referenced)
+    "45202",  # Downtown Cincinnati (law firms often referenced)
 }
 
 # Expected zip prefixes by county (for fallback validation)
 _COUNTY_ZIP_PREFIXES: dict[str, list[str]] = {
-    "Knox":   ["377", "378", "379"],
-    "Blount": ["377", "378"],
+    "Franklin": ["430", "431", "432"],
 }
 
 
@@ -439,7 +438,7 @@ DECEDENT_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Probate — PR mailing address (street + city + TN + zip after the PR title)
+# Probate — PR mailing address (street + city + OH + zip after the PR title)
 # Anchors from the PR title keyword, skips over name/title (non-digit chars),
 # then captures: (1) street address, (2) city, (3) zip
 PR_ADDRESS_RE = re.compile(
@@ -453,7 +452,7 @@ PR_ADDRESS_RE = re.compile(
     r"\s*[,.\s]+\s*"
     r"([A-Za-z][\w\s]*?)"             # city
     r"\s*[,.]\s*"
-    r"(?:Tennessee|Tenn\.?|TN)"
+    r"(?:Ohio|Oh\.?|OH)"
     r"\s*[,.\s]*"
     r"(\d{5})",                        # zip
     re.IGNORECASE,
@@ -584,18 +583,18 @@ _COURTHOUSE_COUNTY_RE = re.compile(
 )
 
 # Counties we care about — notices for other counties are false positives
-_TARGET_COUNTIES = {"knox", "blount"}
+_TARGET_COUNTIES = {"franklin"}
 
 
 def is_target_county(text: str, search_county: str) -> bool:
     """Check if the notice's actual property county matches our target counties.
 
-    The search may return notices that merely *mention* Knox County (e.g. the
-    trustee is from Knox County) but the actual property is in Hamilton, Hardeman,
-    Union, etc.  We detect this by looking at Register's Office and Courthouse
+    The search may return notices that merely *mention* Franklin County (e.g. the
+    trustee is from Franklin County) but the actual property is in Delaware, Licking,
+    Fairfield, etc.  We detect this by looking at Recorder's Office and Courthouse
     references which indicate where the property actually is.
 
-    Returns True if the property appears to be in Knox or Blount County (or if
+    Returns True if the property appears to be in Franklin County (or if
     we can't determine the county — benefit of the doubt).
     """
     # Find all Register's Office mentions — the first one is typically the
@@ -754,7 +753,7 @@ async def parse_notice_page(
             if not notice.owner_street and llm_result.get("owner_street"):
                 notice.owner_street = llm_result["owner_street"]
                 notice.owner_city = llm_result.get("owner_city") or notice.owner_city
-                notice.owner_state = llm_result.get("owner_state") or "TN"
+                notice.owner_state = llm_result.get("owner_state") or "OH"
                 notice.owner_zip = llm_result.get("owner_zip") or notice.owner_zip
                 logger.info("LLM filled PR address: %s", notice.owner_street)
         else:
@@ -849,17 +848,17 @@ def _parse_address(notice: NoticeData) -> None:
     """Extract property address, city, and zip from the notice body text.
 
     Strategy (in priority order):
-      1. Full contextual match: "commonly known as ADDRESS, CITY, TN ZIP"
+      1. Full contextual match: "commonly known as ADDRESS, CITY, OH ZIP"
          → extracts address + city + zip from the same phrase
       2. Address-only contextual: "commonly known as ADDRESS"
          → extracts address, then finds city/zip nearby
-      3. "located at" pattern: "located at ADDRESS, CITY, TN ZIP"
+      3. "located at" pattern: "located at ADDRESS, CITY, OH ZIP"
          → secondary, used for tax sales (validated against blacklist)
       4. Give up — leave fields empty (better than grabbing wrong address)
     """
     text = notice.raw_text.replace("\xa0", " ")
 
-    # ── Strategy 1: Full context — indicator + address + city + TN + zip ──
+    # ── Strategy 1: Full context — indicator + address + city + OH + zip ──
     m = FULL_PROPERTY_RE.search(text)
     if m:
         addr = _clean_address(m.group(1))
@@ -908,7 +907,7 @@ def _parse_address(notice: NoticeData) -> None:
             _extract_city_zip_near(notice, text, m.end())
             return
 
-    # ── Strategy 4: Standalone "ADDRESS, CITY, TN ZIP" for tax types ──
+    # ── Strategy 4: Standalone "ADDRESS, CITY, OH ZIP" for tax types ──
     # Tax sale / tax lien notices sometimes list the address without an
     # indicator phrase. We only try this for those types and validate
     # against known bad addresses and auction context.
@@ -946,16 +945,16 @@ def _get_context_before(text: str, pos: int, chars: int) -> str:
 def _extract_city_zip_near(notice: NoticeData, text: str, addr_end: int) -> None:
     """Extract city and zip from the text near the end of the address match.
 
-    Looks in the 200 characters after the address for "City, TN ZIP" or
-    "City, Tennessee ZIP".
+    Looks in the 200 characters after the address for "City, OH ZIP" or
+    "City, Ohio ZIP".
     """
     window = text[addr_end:addr_end + 200]
 
-    # Try "CITY, [County,] TN ZIP" or "CITY, [County,] Tennessee ZIP"
+    # Try "CITY, [County,] OH ZIP" or "CITY, [County,] Ohio ZIP"
     city_state_re = re.compile(
         r"[,.\s]+([\w][\w\s]*?)"
         r"(?:\s*[,.]\s*\w+\s+County)?"   # optional county
-        r"\s*[,.]\s*(?:Tennessee|Tenn\.?|TN)"
+        r"\s*[,.]\s*(?:Ohio|Oh\.?|OH)"
         r"\s*[,.\s]*(\d{5}(?:-\d{4})?)?",
         re.IGNORECASE,
     )
@@ -966,14 +965,14 @@ def _extract_city_zip_near(notice: NoticeData, text: str, addr_end: int) -> None
             notice.zip = m.group(2)
         return
 
-    # Fallback: find a known TN city in the window
+    # Fallback: find a known OH city in the window
     window_upper = window.upper()
-    for city in TN_CITIES:
+    for city in FRANKLIN_OH_CITIES:
         if city.upper() in window_upper:
             notice.city = city
             break
 
-    # Find a TN zip near the address
+    # Find an OH zip near the address
     zip_match = ZIP_RE.search(window)
     if zip_match:
         notice.zip = zip_match.group(1)
@@ -992,12 +991,12 @@ def _is_valid_fallback_zip(zip_code: str, county: str) -> bool:
 def _extract_city_zip_fallback(notice: NoticeData, text: str) -> None:
     """Last resort: find city/zip anywhere in the notice text.
 
-    Only used when no address was found. Finds the first known TN city
-    and first TN zip code, but rejects courthouse/out-of-county zips.
+    Only used when no address was found. Finds the first known OH city
+    and first OH zip code, but rejects courthouse/out-of-county zips.
     """
     if not notice.city:
         text_upper = text.upper()
-        for city in TN_CITIES:
+        for city in FRANKLIN_OH_CITIES:
             if city.upper() in text_upper:
                 notice.city = city
                 break
@@ -1088,10 +1087,10 @@ def _parse_pr_address(notice: NoticeData) -> None:
             street = street.title()
         notice.owner_street = street
         notice.owner_city = _clean_city(match.group(2))
-        notice.owner_state = "TN"
+        notice.owner_state = "OH"
         notice.owner_zip = match.group(3)
         logger.debug(
-            "PR address: %s, %s, TN %s",
+            "PR address: %s, %s, OH %s",
             notice.owner_street, notice.owner_city, notice.owner_zip,
         )
 

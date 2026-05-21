@@ -15,7 +15,7 @@ Data sources:
   - Skip trace (existing tracerfy_skip_tracer.py)
 
 Usage:
-  python src/main.py buyer-prospect --counties Knox,Blount --months-back 18
+  python src/main.py buyer-prospect --counties Franklin --months-back 18
 """
 
 import csv
@@ -383,7 +383,7 @@ def export_buyers_csv(investors: list[InvestorProfile], output_path: str = "") -
                 "owner_name": inv.person_behind or inv.name,
                 "address": "",
                 "city": "",
-                "state": "TN",
+                "state": "OH",
                 "zip": inv.primary_zip,
                 "tags": f"buyer,{inv.buyer_type},buyer_score_{round(inv.score)}",
                 "lists": "Cash Buyers",
@@ -405,7 +405,7 @@ def run_buyer_prospecting(counties: list[str] | None = None,
 
     Returns dict with report and output paths.
     """
-    counties = counties or ["Knox", "Blount"]
+    counties = counties or ["Franklin"]
     county_str = ", ".join(counties)
     logger.info("Starting buyer prospecting for: %s (last %d months)", county_str, months_back)
 

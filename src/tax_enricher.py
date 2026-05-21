@@ -464,7 +464,7 @@ def _knox_name_search(name: str, min_score: float = 0.4) -> list[tuple[float, di
         return []
 
 
-def _people_search_property(name: str, city: str = "Knoxville", state: str = "TN") -> str | None:
+def _people_search_property(name: str, city: str = "Columbus", state: str = "OH") -> str | None:
     """Search people search sites for a person's property address.
 
     Uses TruePeopleSearch/FastPeopleSearch via the obituary enricher's
@@ -484,7 +484,7 @@ def _people_search_property(name: str, city: str = "Knoxville", state: str = "TN
             # Look for Knox County addresses (37xxx ZIP codes)
             addr_pattern = _re.compile(
                 r"(\d+\s+[\w\s.]+(?:St|Ave|Rd|Dr|Ln|Ct|Blvd|Way|Pl|Cir|Pike|Trl|Loop|Run|Ter|Pkwy))"
-                r"[,.\s]+(?:Knoxville|Knox)",
+                r"[,.\s]+(?:Columbus|Knox)",
                 _re.IGNORECASE,
             )
             matches = addr_pattern.findall(text)
@@ -565,12 +565,12 @@ def _probate_property_lookup(notices: list[NoticeData]) -> None:
 
         # ── Tier 3: People search for decedent's property address ──
         logger.info("  Tier 3: People search for %s", decedent)
-        people_addr = _people_search_property(decedent, city="Knoxville")
+        people_addr = _people_search_property(decedent, city="Columbus")
         if people_addr:
             logger.info("  Tier 3 (People Search): %s", people_addr)
             notice.address = people_addr
-            notice.city = "Knoxville"
-            notice.state = "TN"
+            notice.city = "Columbus"
+            notice.state = "OH"
             continue
 
         logger.warning("  No property found for decedent: %s (all tiers exhausted)", decedent)
@@ -579,8 +579,8 @@ def _probate_property_lookup(notices: list[NoticeData]) -> None:
 def _apply_parcel_to_notice(notice: NoticeData, parcel: dict) -> None:
     """Apply parcel data from Knox Tax API to a notice."""
     notice.address = parcel.get("parcel_address", "")
-    notice.city = "Knoxville"
-    notice.state = "TN"
+    notice.city = "Columbus"
+    notice.state = "OH"
     account = parcel.get("account_number", "")
     if account:
         notice.parcel_id = account

@@ -129,7 +129,7 @@ def _lookup_missing_heir_addresses(
     """Fill in mailing addresses for signing-authority heirs that lack one.
 
     For each living heir with signing_authority=true but no `street`, runs the
-    existing DM address waterfall (Knox Tax → Serper/Firecrawl → DDG) and stores
+    existing DM address waterfall (Franklin Auditor → Serper/Firecrawl → DDG) and stores
     the result back onto the heir. Mutates notice.heir_map_json in place.
 
     Returns the number of heirs that gained an address.
@@ -171,7 +171,7 @@ def _lookup_missing_heir_addresses(
         if addr and addr.get("street"):
             heir["street"] = addr.get("street", "")
             heir["city"] = addr.get("city", "") or city_hint
-            heir["state"] = addr.get("state", "") or "TN"
+            heir["state"] = addr.get("state", "") or "OH"
             heir["zip"] = addr.get("zip", "")
             heir["address_source"] = addr.get("source", "")
             filled += 1
@@ -201,7 +201,7 @@ def batch_skip_trace(
     phones/emails are stored in their heir_map_json entry.
 
     When lookup_heir_addresses is True, signing-authority heirs without a known
-    mailing address get one looked up (Knox Tax → people search) before the trace
+    mailing address get one looked up (Franklin Auditor → people search) before the trace
     so Tracerfy has enough info to return phones. Uses ANTHROPIC_API_KEY (or the
     explicit override) for LLM-based extraction from people-search pages.
 
@@ -276,7 +276,7 @@ def batch_skip_trace(
     writer.writerow(["first_name", "last_name", "address", "city", "state",
                      "zip", "mail_address", "mail_city", "mail_state"])
     for notice_ref, first, last, address, city, zip_code, _ in lookup_map:
-        state = notice_ref.state or "TN"
+        state = notice_ref.state or "OH"
         writer.writerow([first, last, address, city, state, zip_code, "", "", ""])
     csv_content = csv_buffer.getvalue()
     csv_buffer.close()
