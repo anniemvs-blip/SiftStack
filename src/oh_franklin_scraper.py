@@ -666,7 +666,7 @@ async def scrape_franklin_oh(
         state = {}
 
     if types is None:
-        types = ["foreclosure", "probate", "tax_sale", "tax_delinquent"]
+        types = ["foreclosure", "probate", "tax_sale", "tax_delinquent", "eviction"]
 
     today = date.today()
 
@@ -715,6 +715,13 @@ async def scrape_franklin_oh(
         td_notices = scrape_tax_delinquent()
         all_notices.extend(td_notices)
         logger.info("Tax delinquent: %d records", len(td_notices))
+
+    if "eviction" in types:
+        logger.info("── Eviction ──")
+        from oh_franklin_eviction import scrape_evictions
+        ev_notices = scrape_evictions(since=since)
+        all_notices.extend(ev_notices)
+        logger.info("Eviction: %d records", len(ev_notices))
 
     logger.info("Franklin County OH total: %d notices", len(all_notices))
     return all_notices
