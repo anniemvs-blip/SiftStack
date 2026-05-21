@@ -666,7 +666,9 @@ async def scrape_franklin_oh(
         state = {}
 
     if types is None:
-        types = ["foreclosure", "probate", "tax_sale", "tax_delinquent", "eviction", "recorder"]
+        # Default: omit "foreclosure" (Sheriff Auction) — Recorder gives the
+        # same signal 4-12 weeks earlier. Run `--types foreclosure` to opt back in.
+        types = ["probate", "tax_sale", "tax_delinquent", "eviction", "recorder"]
 
     today = date.today()
 
@@ -712,7 +714,7 @@ async def scrape_franklin_oh(
     if "tax_delinquent" in types:
         logger.info("── Tax Delinquent ──")
         from oh_franklin_tax_delinquent import scrape_tax_delinquent
-        td_notices = scrape_tax_delinquent()
+        td_notices = scrape_tax_delinquent(state=state)
         all_notices.extend(td_notices)
         logger.info("Tax delinquent: %d records", len(td_notices))
 
