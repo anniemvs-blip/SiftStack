@@ -723,5 +723,15 @@ async def scrape_franklin_oh(
         all_notices.extend(ev_notices)
         logger.info("Eviction: %d records", len(ev_notices))
 
+    if "lis_pendens" in types:
+        # Recorder lis-pendens scraper — earliest foreclosure signal but
+        # currently a Phase 3 R&D skeleton (returns 0 records until Doc-Type
+        # UI filter is wired up). See oh_franklin_recorder.py docstring.
+        logger.info("── Recorder Lis Pendens (Phase 3 WIP) ──")
+        from oh_franklin_recorder import scrape_recorder_lis_pendens
+        lp_notices = scrape_recorder_lis_pendens(since=since, until=until)
+        all_notices.extend(lp_notices)
+        logger.info("Lis pendens: %d records", len(lp_notices))
+
     logger.info("Franklin County OH total: %d notices", len(all_notices))
     return all_notices
