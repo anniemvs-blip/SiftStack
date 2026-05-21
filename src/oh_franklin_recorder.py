@@ -103,7 +103,7 @@ EXCLUDED_DOC_TYPES = {
 }
 
 
-async def _scrape_async(
+async def scrape_recorder_async(
     since: date,
     until: date,
     doc_codes: list[str],
@@ -236,9 +236,41 @@ async def _scrape_async(
 
         await browser.close()
 
+    # Resolve to street addresses inline so downstream enrichment isn't at the
+    # mercy of the entity-owner filter (which would otherwise drop these records
+    # before Step 4 had a chance to fill addresses).
+    #
+    # Two-stage resolution:
+    #   1. Parcel ID from the legal description → Auditor GIS PARCELID lookup.
+    #      Covers ~half of recorder records (the rest abbreviate the legal text).
+    #   2. For the no-parcel remainder, fall back to owner-name search BUT only
+    #      for tax_delinquent and foreclosure notice types — Federal Tax Liens
+    #      filed against a person, and lis pendens NOTICEs filed against a
+    #      foreclosure defendant. In both cases the named grantor IS the
+    #      property owner. Probate certificates of transfer are excluded — the
+    #      named grantor is often the heir receiving the property, not the
+    #      current owner of record.
+    #
+    # Records that neither path resolves get dropped. We don't pursue
+    # plat-based resolution because every property has a "Lot N of {SUB}"
+    # legal description regardless of whether it's a house or vacant land,
+    # and disambiguating requires per-doc detail-page scraping.
+    from franklin_auditor import (
+        fill_addresses_from_owner_names,
+        fill_addresses_from_parcels,
+    )
+
+    before = len(notices)
+    by_parcel, _ = fill_addresses_from_parcels(notices)
+    by_name, _ = fill_addresses_from_owner_names(notices)
+    notices = [n for n in notices if (n.address or "").strip()]
+    skipped_no_address = before - len(notices)
+
     logger.info(
-        "Recorder done: %d records (skipped %d excluded, %d unmapped)",
-        len(notices), skipped_excluded, skipped_unmapped,
+        "Recorder done: %d records (parcel-resolved %d, name-resolved %d, "
+        "dropped %d unresolvable, skipped %d excluded, %d unmapped)",
+        len(notices), by_parcel, by_name, skipped_no_address,
+        skipped_excluded, skipped_unmapped,
     )
     return notices
 
@@ -270,8 +302,8 @@ def scrape_recorder(
     if doc_codes is None:
         doc_codes = DEFAULT_DOC_CODES
 
-    return asyncio.run(_scrape_async(since=since, until=until, doc_codes=doc_codes))
+    return asyncio.run(scrape_recorder_async(since=since, until=until, doc_codes=doc_codes))
 
 
-# Backwards-compat alias for the orchestrator
+# Backwards-compat alias for the orchestrator (sync entrypoint for standalone use)
 scrape_recorder_lis_pendens = scrape_recorder

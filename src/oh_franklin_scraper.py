@@ -731,8 +731,10 @@ async def scrape_franklin_oh(
         # FEDERAL TAX LIEN, MECHANICS LIEN, ASSIGN OF RENTS, CERTIFICATE OF
         # TRANSFER, TRUST, SHERIFFS DEED. See oh_franklin_recorder.py.
         logger.info("── Recorder (Notice/Lien/Trust/Transfer) ──")
-        from oh_franklin_recorder import scrape_recorder
-        rc_notices = scrape_recorder(since=since, until=until)
+        from oh_franklin_recorder import scrape_recorder_async, DEFAULT_DOC_CODES
+        rc_notices = await scrape_recorder_async(
+            since=since, until=until, doc_codes=DEFAULT_DOC_CODES,
+        )
         all_notices.extend(rc_notices)
         logger.info("Recorder: %d records", len(rc_notices))
 

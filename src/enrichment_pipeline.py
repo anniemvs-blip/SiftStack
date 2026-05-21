@@ -369,24 +369,46 @@ def run_enrichment_pipeline(
 
     # ── Step 4: Parcel Address Lookup ────────────────────────────────
     if not opts.skip_parcel_lookup and not opts.skip_tax:
-        candidates = [
+        knox_candidates = [
             n
             for n in notices
             if n.parcel_id.strip() and n.county.lower() == "knox"
         ]
-        if candidates:
-            logger.info(
-                "── Step 4: Parcel Address Lookup (%d candidates) ──",
-                len(candidates),
-            )
-            try:
-                from tax_enricher import lookup_parcel_addresses
+        franklin_candidates = [
+            n
+            for n in notices
+            if n.parcel_id.strip()
+            and n.county.lower() == "franklin"
+            and not (n.address or "").strip()
+        ]
 
-                lookup_parcel_addresses(notices)
-            except ImportError:
-                logger.warning("  tax_enricher not available — skipping")
-            except Exception as e:
-                logger.warning("  Parcel address lookup failed: %s", e)
+        if knox_candidates or franklin_candidates:
+            logger.info(
+                "── Step 4: Parcel Address Lookup (%d knox, %d franklin) ──",
+                len(knox_candidates), len(franklin_candidates),
+            )
+
+            if knox_candidates:
+                try:
+                    from tax_enricher import lookup_parcel_addresses
+
+                    lookup_parcel_addresses(notices)
+                except ImportError:
+                    logger.warning("  tax_enricher (Knox) not available — skipping")
+                except Exception as e:
+                    logger.warning("  Knox parcel address lookup failed: %s", e)
+
+            if franklin_candidates:
+                try:
+                    from franklin_auditor import fill_addresses_from_parcels
+
+                    filled, attempted = fill_addresses_from_parcels(notices)
+                    logger.info(
+                        "  Franklin Auditor: filled %d/%d parcel addresses",
+                        filled, attempted,
+                    )
+                except Exception as e:
+                    logger.warning("  Franklin parcel address lookup failed: %s", e)
         else:
             logger.info("── Step 4: Parcel Address Lookup (no candidates) ──")
     elif opts.skip_parcel_lookup:
