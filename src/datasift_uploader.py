@@ -300,13 +300,31 @@ async def upload_csv(
 
     await _screenshot(page, "step1_form_filled")
 
-    # Click "Next Step" to proceed to step 2
+    # Click "Next Step" to proceed past Setup
     await _click_next_step(page, timeout=30000)
 
-    # ── Wizard Step 2: Add tags ──
-    logger.info("Wizard Step 2: Adding 'Courthouse Data' tag...")
+    # ── Wizard Step 2: Enrichment (pass-through) ──
+    # DataSift added a new "Enrichment" screen between Setup and Add Tags
+    # (observed 2026-05-21). We don't configure enrichment here — the
+    # post-upload Manage → Enrich Data step handles that. Just advance.
+    logger.info("Wizard Step 2: Enrichment (pass-through, no config)...")
+    await page.wait_for_timeout(1500)
+    await _screenshot(page, "step2_enrichment_passthrough")
+    # Re-dismiss notification popup if it reappeared between steps
+    try:
+        no_thanks = page.locator('button:has-text("NO, THANKS"), button:has-text("No, thanks")')
+        if await no_thanks.count() > 0 and await no_thanks.first.is_visible():
+            await no_thanks.first.click()
+            await page.wait_for_timeout(500)
+            logger.debug("Re-dismissed notifications popup at Enrichment step")
+    except Exception:
+        pass
+    await _click_next_step(page, timeout=20000)
+
+    # ── Wizard Step 3: Add tags ──
+    logger.info("Wizard Step 3: Adding 'Courthouse Data' tag...")
     await page.wait_for_timeout(1000)
-    await _screenshot(page, "step2_tags")
+    await _screenshot(page, "step3_tags")
 
     # Add "Courthouse Data" tag via the Custom Tags input on the right side
     try:
@@ -373,10 +391,10 @@ async def upload_csv(
 
     await _click_next_step(page)
 
-    # ── Wizard Step 3: Upload the file ──
-    logger.info("Wizard Step 3: Uploading CSV file: %s", csv_path.name)
+    # ── Wizard Step 4: Upload the file ──
+    logger.info("Wizard Step 4: Uploading CSV file: %s", csv_path.name)
     await page.wait_for_timeout(3000)
-    await _screenshot(page, "step3_before_upload")
+    await _screenshot(page, "step4_before_upload")
 
     try:
         file_input = page.locator('input[type="file"]')
@@ -393,7 +411,7 @@ async def upload_csv(
             logger.info("CSV file selected: %s", csv_path.name)
             await page.wait_for_timeout(3000)
         else:
-            await _screenshot(page, "step3_no_file_input")
+            await _screenshot(page, "step4_no_file_input")
             result["message"] = "Could not find file input element"
             logger.error(result["message"])
             return result
@@ -405,8 +423,8 @@ async def upload_csv(
     await _screenshot(page, "step3_file_uploaded")
     await _click_next_step(page)
 
-    # ── Wizard Step 4: Map the columns ──
-    logger.info("Wizard Step 4: Column mapping — mapping Tags and Lists...")
+    # ── Wizard Step 5: Map the columns ──
+    logger.info("Wizard Step 5: Column mapping — mapping Tags and Lists...")
     await page.wait_for_timeout(3000)
     await _screenshot(page, "step4_column_mapping")
 
@@ -470,8 +488,8 @@ async def upload_csv(
     await _click_next_step(page)
     await _screenshot(page, "step4_mapping_done")
 
-    # ── Wizard Step 5: Review ──
-    logger.info("Wizard Step 5: Review and finish upload...")
+    # ── Wizard Step 6: Review ──
+    logger.info("Wizard Step 6: Review and finish upload...")
     await page.wait_for_timeout(2000)
     await _screenshot(page, "step5_review")
 
@@ -1023,6 +1041,8 @@ async def upload_to_datasift(
     headless: bool = True,
     enrich: bool = True,
     skip_trace: bool = True,
+    list_name: str = "Claude Test",
+    existing_list: bool = True,
 ) -> dict:
     """Full DataSift workflow: launch browser → login → upload CSV → enrich → skip trace.
 
@@ -1033,6 +1053,12 @@ async def upload_to_datasift(
         headless: Run browser in headless mode.
         enrich: Run "Enrich Property Information" after upload (default True).
         skip_trace: Run "Skip Trace" after upload (default True, uses unlimited plan).
+        list_name: DataSift list to upload into. Defaults to "Claude Test" — the
+            user's standing disposition list per CLAUDE.md (set 2026-05-21).
+            Pass a different name to route a specific run elsewhere.
+        existing_list: When True (default), uploads append to ``list_name`` which
+            must already exist in DataSift. When False, creates a new list with
+            that name.
 
     Returns:
         Dict with upload results including enrich_result and skip_trace_result.
@@ -1071,13 +1097,13 @@ async def upload_to_datasift(
                     "message": "DataSift login failed",
                 }
 
-            # Upload CSV
-            result = await upload_csv(page, csv_path)
+            # Upload CSV — appending to user's standing list by default
+            result = await upload_csv(
+                page, csv_path,
+                list_name=list_name, existing_list=existing_list,
+            )
 
             if result.get("success"):
-                # Derive list name (same format as upload_csv generates)
-                from datetime import datetime as _dt
-                list_name = f"SiftStack {_dt.now().strftime('%Y-%m-%d')}"
 
                 # Enrich property data via SiftMap
                 if enrich:
