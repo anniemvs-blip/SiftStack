@@ -27,11 +27,53 @@ logger = logging.getLogger(__name__)
 DATASIFT_UPLOAD_URL = "https://app.reisift.io/records/properties"
 
 
+async def _kill_overlays(page: Page) -> None:
+    """Remove floating chat/survey widgets that intercept pointer events.
+
+    The Sensei help-chat bubble (bottom-right) overlaps the wizard's "Next Step"
+    button, so a normal Playwright click fails its actionability check ("element
+    receives events") and times out. Beamer push / NPS survey iframes do the same
+    globally. Strip them all from the DOM before clicking. Best-effort — never
+    raises.
+    """
+    try:
+        await page.evaluate(
+            """() => {
+                const kill = (el) => { try { el.remove(); } catch (e) {} };
+                // Known widget containers (Sensei chat, Intercom, Beamer, NPS)
+                const sel = [
+                    '[id*="beamer" i]', '[class*="beamer" i]',
+                    '[id*="intercom" i]', '[class*="intercom" i]',
+                    '[id*="sensei" i]', '[class*="sensei" i]',
+                    '#npsIframeContainer', '#beamerPushModal',
+                    '[class*="chat-widget" i]', '[class*="launcher" i]',
+                    'iframe[src*="intercom" i]', 'iframe[src*="beamer" i]',
+                    'iframe[src*="sensei" i]', 'iframe[title*="chat" i]'
+                ];
+                sel.forEach(s => document.querySelectorAll(s).forEach(kill));
+                // Fallback: any small fixed element hugging the bottom-right
+                // corner (typical chat bubble) that could overlap the button.
+                const vw = window.innerWidth, vh = window.innerHeight;
+                document.querySelectorAll('div, iframe').forEach(el => {
+                    const cs = getComputedStyle(el);
+                    if (cs.position !== 'fixed') return;
+                    const r = el.getBoundingClientRect();
+                    if (r.width === 0 || r.width > 460) return;
+                    if (r.bottom > vh - 140 && r.right > vw - 120) kill(el);
+                });
+            }"""
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Overlay cleanup skipped: %s", e)
+
+
 async def _click_next_step(page: Page, timeout: int = 20000) -> bool:
     """Click the 'Next Step' button that appears in the upload wizard.
 
     Default timeout is 20s to handle slow SPA rendering in headless/cloud
-    environments (Apify containers take longer than local desktop).
+    environments (Apify containers take longer than local desktop). Strips
+    overlapping chat/survey widgets first, then falls back to a JS click if the
+    normal (actionability-checked) click is still blocked.
     """
     try:
         btn = page.locator(
@@ -40,7 +82,14 @@ async def _click_next_step(page: Page, timeout: int = 20000) -> bool:
             'button:has-text("Continue")'
         )
         await btn.first.wait_for(state="visible", timeout=timeout)
-        await btn.first.click()
+        await _kill_overlays(page)
+        await btn.first.scroll_into_view_if_needed(timeout=3000)
+        try:
+            await btn.first.click(timeout=8000)
+        except PwTimeout:
+            # Still obscured/blocked — bypass actionability checks with a JS click
+            logger.debug("Next Step normal click blocked; using JS click")
+            await btn.first.evaluate("el => el.click()")
         await page.wait_for_timeout(2000)
         return True
     except PwTimeout:
@@ -500,7 +549,15 @@ async def upload_csv(
             'button:has-text("Submit")'
         )
         if await finish_btn.count() > 0:
-            await finish_btn.first.click()
+            # Strip the chat/survey overlay and fall back to a JS click — a
+            # plain click gets silently blocked by the Sensei widget, so the
+            # upload never actually submits (no records, no tags).
+            await _kill_overlays(page)
+            try:
+                await finish_btn.first.click(timeout=8000)
+            except PwTimeout:
+                logger.debug("Finish Upload normal click blocked; using JS click")
+                await finish_btn.first.evaluate("el => el.click()")
             logger.info("Clicked Finish Upload")
         else:
             await _screenshot(page, "step5_no_finish_btn")
