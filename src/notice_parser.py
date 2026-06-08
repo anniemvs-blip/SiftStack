@@ -62,6 +62,7 @@ class NoticeData:
     lot_size: str = ""             # Lot size in sqft
     # Probate-specific fields
     decedent_name: str = ""        # Deceased person's name (probate only)
+    estate_subtype: str = ""       # Normalized estate type, e.g. "Full Administration With Will"
     owner_street: str = ""         # PR/contact mailing street address
     owner_city: str = ""           # PR/contact mailing city
     owner_state: str = ""          # PR/contact mailing state

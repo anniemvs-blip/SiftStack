@@ -183,6 +183,24 @@ def _parse_probate_fid(html: str) -> dict:
     return _parse_probate_detail(html)  # same table structure
 
 
+def _normalize_estate_subtype(raw: str) -> str:
+    """Normalize a Probate Court 'Case Subtype' into a clean Estate Type label.
+
+    The court UI abbreviates and truncates labels (e.g.
+    'SUMMARY ADMINISTRATION W/O WIL'). Expand to canonical title-case strings
+    like 'Summary Administration Without Will' for the DataSift Estate Type
+    field. Order matters: expand 'W/O' before the bare 'W/'.
+    """
+    if not raw:
+        return ""
+    s = raw.upper().strip()
+    s = s.replace("W/O", " WITHOUT ").replace("W/", " WITH ")
+    s = re.sub(r"\bADMIN\b", "ADMINISTRATION", s)  # 'ADMIN' -> 'ADMINISTRATION'
+    s = re.sub(r"\bWIL\b", "WILL", s)              # fix truncation 'WIL' -> 'WILL'
+    s = re.sub(r"\s+", " ", s).strip()
+    return s.title()
+
+
 def _scrape_probate_case(case_num: int) -> Optional[NoticeData]:
     """Fetch and parse a single probate case. Returns None if not an estate case."""
     detail_url = PROBATE_DETAIL_URL.format(case_num=case_num)
@@ -248,6 +266,8 @@ def _scrape_probate_case(case_num: int) -> Optional[NoticeData]:
         state="OH",
         owner_name=pr_name or decedent_name,
         decedent_name=decedent_name,
+        estate_subtype=_normalize_estate_subtype(subtype),
+        owner_deceased="yes",  # probate = decedent owner; routes deceased contact logic
         date_of_death=_fmt(dod) if dod else "",
         owner_street=pr_street,
         owner_city=pr_city,
