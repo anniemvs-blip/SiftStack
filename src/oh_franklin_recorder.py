@@ -79,21 +79,25 @@ RESULTS_URL_TMPL = (
 PAGE_SIZE = 50
 MAX_PAGES = 20  # 50 * 20 = 1000-row safety cap
 
-# Default v1 instrument types — distress signals selected with user
-DEFAULT_DOC_CODES = ["NO", "CT", "TR", "FLN", "FT", "ML", "AR", "SD"]
+# Default v1 instrument types — distress signals selected with user.
+# Recorder is the source for LIS PENDENS (foreclosure) and LIENS only.
+# Probate is sourced exclusively from Probate Court NetData
+# (oh_franklin_scraper.scrape_probate) — do NOT add CT/TR (Certificate of
+# Transfer / Trust) here: those are post-probate property transfers and trust
+# recordings, not motivated-seller probate leads, and carry no live PR/executor.
+DEFAULT_DOC_CODES = ["NO", "FLN", "FT", "ML", "AR", "SD"]
 
 # Map the human-readable DOC TYPE column (post-fetch) to SiftStack notice_types.
 # Keys are uppercase, exact match (with one prefix-match special case below).
+# INVARIANT: the recorder never emits "probate" — see scrape_franklin_oh guard.
 DOC_TYPE_TO_NOTICE_TYPE = {
     "NOTICE":                 "foreclosure",   # lis pendens (confirmed by user)
     "SHERIFFS DEED":          "foreclosure",   # completed foreclosure
     "ASSIGN OF RENTS":        "foreclosure",   # pre-foreclosure default
     "MECHANICS LIEN":         "lien",
-    "FEDERAL TAX LIEN":       "tax_delinquent",
-    "FEDERAL LIEN":           "tax_delinquent",
+    "FEDERAL TAX LIEN":       "lien",          # IRS lien on the person — a lien,
+    "FEDERAL LIEN":           "lien",          # NOT county property-tax delinquency
     "LIEN":                   "lien",
-    "CERTIFICATE OF TRANSFER": "probate",
-    "TRUST":                  "probate",       # estate planning proxy
 }
 
 # Doc types we want to DISCARD post-fetch even if they came back in our filter

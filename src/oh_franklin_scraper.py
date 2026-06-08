@@ -675,7 +675,20 @@ async def scrape_franklin_oh(
         # in DataSift, burns enrichment + skip-trace credits, and dilutes the
         # day's actual new distress signal. Run `--types tax_sale` (or add
         # tax_sale to a comma list) once after the new annual list is posted.
-        types = ["probate", "tax_delinquent", "eviction", "recorder"]
+        #
+        # Default: omit "eviction" — focusing daily pulls on probate + recorder
+        # while we refine eviction lead quality. Even after the institutional/
+        # apartment-complex filter (build 1.0.30) drops ~85% of raw filings,
+        # the remaining landlords are mostly small-LLC operators rather than
+        # the highest-motivation individual sellers. Run `--types eviction`
+        # (or add it to a comma list) to opt in.
+        #
+        # Default: omit "tax_delinquent" — the Auditor's ArcGIS feed froze
+        # 2025-07-17, so the incremental cursor returns 0 every run. Use the
+        # separate `oh-tax-refresh` command (Treasurer per-parcel crawl) on a
+        # monthly cadence to get fresh balances + owner names. Run
+        # `--types tax_delinquent` to opt back in if the ArcGIS feed resumes.
+        types = ["probate", "recorder"]
 
     today = date.today()
 
@@ -733,15 +746,26 @@ async def scrape_franklin_oh(
         logger.info("Eviction: %d records", len(ev_notices))
 
     if "recorder" in types or "lis_pendens" in types:
-        # Recorder scraper — earliest distress signal. Pulls LIS PENDENS
-        # (foreclosure within 7 days of complaint per ORC 2703.26) plus
-        # FEDERAL TAX LIEN, MECHANICS LIEN, ASSIGN OF RENTS, CERTIFICATE OF
-        # TRANSFER, TRUST, SHERIFFS DEED. See oh_franklin_recorder.py.
-        logger.info("── Recorder (Notice/Lien/Trust/Transfer) ──")
+        # Recorder scraper — earliest distress signal. Source for LIS PENDENS
+        # (foreclosure within 7 days of complaint per ORC 2703.26) and LIENS
+        # only: FEDERAL TAX LIEN, FEDERAL LIEN, MECHANICS LIEN, ASSIGN OF RENTS,
+        # SHERIFFS DEED. Probate is sourced exclusively from Probate Court
+        # NetData (scrape_probate) — the recorder must NOT emit probate.
+        logger.info("── Recorder (Lis Pendens / Liens) ──")
         from oh_franklin_recorder import scrape_recorder_async, DEFAULT_DOC_CODES
         rc_notices = await scrape_recorder_async(
             since=since, until=until, doc_codes=DEFAULT_DOC_CODES,
         )
+        # Guard: probate must come only from Probate Court NetData, never the
+        # recorder. Catches any future re-introduction of a doc-type→probate
+        # mapping (e.g. Certificate of Transfer / Trust) before it ships leads.
+        rc_probate = [n for n in rc_notices if n.notice_type == "probate"]
+        if rc_probate:
+            raise AssertionError(
+                f"Recorder emitted {len(rc_probate)} probate record(s) — probate "
+                "must come only from Probate Court NetData. Check "
+                "oh_franklin_recorder.DOC_TYPE_TO_NOTICE_TYPE / DEFAULT_DOC_CODES."
+            )
         all_notices.extend(rc_notices)
         logger.info("Recorder: %d records", len(rc_notices))
 
