@@ -291,6 +291,16 @@ async def scrape_recorder_async(
     notices = [n for n in notices if (n.address or "").strip()]
     skipped_no_address = before - len(notices)
 
+    # The Auditor GIS returns street + ZIP but no situs city. Fill the city from
+    # street+state+ZIP via the free US Census geocoder (no API key, not Smarty).
+    try:
+        from census_zip_fill import backfill_address_fields
+        filled = backfill_address_fields(notices)
+        if filled:
+            logger.info("Recorder: filled city on %d record(s) via Census geocoder", filled)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Recorder: city backfill skipped: %s", e)
+
     logger.info(
         "Recorder done: %d records (parcel-resolved %d, name-resolved %d, "
         "dropped %d unresolvable, skipped %d excluded, %d unmapped)",
