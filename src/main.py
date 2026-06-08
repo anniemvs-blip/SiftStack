@@ -1071,6 +1071,13 @@ def cli_main() -> None:
         help="Skip enrichment pipeline entirely (oh-daily mode). Writes raw scrape output.",
     )
     parser.add_argument(
+        "--no-filter",
+        action="store_true",
+        dest="no_filter",
+        help="Skip the workable-lead filter (oh-daily). Keeps apartments/nursing "
+             "homes/commercial/out-of-band-value records instead of dropping them.",
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable debug logging",
@@ -1794,6 +1801,19 @@ def _run_oh_franklin(args) -> None:
     if not notices:
         logging.warning("No Franklin County OH records found for the given date range")
         return
+
+    # Workable-lead filter (Franklin Auditor): keep residential single-family /
+    # condo in the value band that resolve to a parcel; drop apartments, nursing
+    # homes, commercial, LLC-owned rentals, and out-of-band values. FLAGged
+    # records are kept with a note in the Data Flags column. --no-filter bypasses.
+    if not getattr(args, "no_filter", False):
+        from lead_filter import filter_notices
+        notices, _dropped = filter_notices(notices)
+        for _n, _reason in _dropped:
+            logging.info("  filtered out: %s [%s] — %s", _n.address, _n.notice_type, _reason)
+        if not notices:
+            logging.warning("All records filtered out as non-workable")
+            return
 
     # Enrichment pipeline — fills ZIPs (Smarty), property data (Zillow), and
     # deceased-owner detection (obituary) for the OH scrape output. Disabled
