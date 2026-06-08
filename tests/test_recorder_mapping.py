@@ -36,10 +36,18 @@ for offender in ("CERTIFICATE OF TRANSFER", "TRUST"):
     check(offender not in DOC_TYPE_TO_NOTICE_TYPE,
           f"{offender!r} not in DOC_TYPE_TO_NOTICE_TYPE")
 
-# And we must not even request their doc codes.
-for code in ("CT", "TR"):
+# Excluded doc codes — must NOT be requested (each removed for a documented
+# reason: CT/TR = probate transfers, AR = loan-origination collateral,
+# SD = completed foreclosure, ML = weak contractor-dispute signal).
+for code in ("CT", "TR", "AR", "SD", "ML"):
     check(code not in DEFAULT_DOC_CODES,
           f"doc code {code!r} not requested in DEFAULT_DOC_CODES")
+
+# The intended set: lis pendens (NO) + federal/tax liens (FLN, FT).
+check(set(DEFAULT_DOC_CODES) == {"NO", "FLN", "FT"},
+      f"DEFAULT_DOC_CODES == {{NO, FLN, FT}} (got {DEFAULT_DOC_CODES})")
+check("MECHANICS LIEN" not in DOC_TYPE_TO_NOTICE_TYPE,
+      "MECHANICS LIEN dropped from mapping")
 
 print("Recorder only produces foreclosure/lien notice types:")
 allowed = {"foreclosure", "lien"}

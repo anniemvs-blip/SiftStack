@@ -79,25 +79,27 @@ RESULTS_URL_TMPL = (
 PAGE_SIZE = 50
 MAX_PAGES = 20  # 50 * 20 = 1000-row safety cap
 
-# Default v1 instrument types — distress signals selected with user.
-# Recorder is the source for LIS PENDENS (foreclosure) and LIENS only.
-# Probate is sourced exclusively from Probate Court NetData
-# (oh_franklin_scraper.scrape_probate) — do NOT add CT/TR (Certificate of
-# Transfer / Trust) here: those are post-probate property transfers and trust
-# recordings, not motivated-seller probate leads, and carry no live PR/executor.
-DEFAULT_DOC_CODES = ["NO", "FLN", "FT", "ML", "AR", "SD"]
+# Recorder pulls LIS PENDENS (foreclosure) and FEDERAL/TAX LIENS only.
+# Deliberately EXCLUDED and why:
+#   - AR (Assign of Rents): pulls the Mortgages-category assignment recorded
+#     WITH a new loan — origination collateral (LLC borrower → bank), not
+#     distress. Verified June 2026 against live records.
+#   - SD (Sheriff's Deed): a COMPLETED foreclosure (post-auction); owner is
+#     already the bank/REO buyer, not a motivated seller.
+#   - ML (Mechanics Lien): weak signal — usually a contractor dispute, skews
+#     commercial/LLC/new-construction, and the grantor is often the lien
+#     claimant (the contractor) rather than the property owner.
+#   - CT/TR (Certificate of Transfer / Trust): post-probate transfers — probate
+#     is sourced only from Probate Court NetData (oh_franklin_scraper).
+DEFAULT_DOC_CODES = ["NO", "FLN", "FT"]
 
 # Map the human-readable DOC TYPE column (post-fetch) to SiftStack notice_types.
 # Keys are uppercase, exact match (with one prefix-match special case below).
 # INVARIANT: the recorder never emits "probate" — see scrape_franklin_oh guard.
 DOC_TYPE_TO_NOTICE_TYPE = {
     "NOTICE":                 "foreclosure",   # lis pendens (confirmed by user)
-    "SHERIFFS DEED":          "foreclosure",   # completed foreclosure
-    "ASSIGN OF RENTS":        "foreclosure",   # pre-foreclosure default
-    "MECHANICS LIEN":         "lien",
-    "FEDERAL TAX LIEN":       "lien",          # IRS lien on the person — a lien,
-    "FEDERAL LIEN":           "lien",          # NOT county property-tax delinquency
-    "LIEN":                   "lien",
+    "FEDERAL TAX LIEN":       "lien",          # IRS tax lien on the owner
+    "FEDERAL LIEN":           "lien",          # other recorded federal lien
 }
 
 # Doc types we want to DISCARD post-fetch even if they came back in our filter
@@ -157,9 +159,17 @@ async def scrape_recorder_async(
                 logger.info("Recorder: no rows rendered at offset %d — done", offset)
                 break
 
-            await page.wait_for_timeout(2000)
-
+            # Rows render progressively (React). Wait for the count to STABILIZE
+            # before reading — otherwise we read a half-loaded table and miss
+            # rows (the cause of earlier run-to-run variance / dropped records).
             rows = page.locator('tr[role="row"]')
+            prev = -1
+            for _ in range(20):  # up to ~10s
+                await page.wait_for_timeout(500)
+                cur = await rows.count()
+                if cur > 0 and cur == prev:
+                    break
+                prev = cur
             n_rows = await rows.count()
 
             if n_rows == 0:
@@ -180,6 +190,17 @@ async def scrape_recorder_async(
                     rec_date = (await cells.nth(6).inner_text()).strip()
                     inst_num = (await cells.nth(7).inner_text()).strip()
                     legal    = (await cells.nth(9).inner_text()).strip()
+
+                    # The real publicsearch doc id lives in the row's checkbox
+                    # id ("table-checkbox-<docid>"), NOT the instrument number in
+                    # col 7. Building /doc/<instrument#> produces dead links.
+                    doc_id = ""
+                    cb = rows.nth(i).locator('input[type="checkbox"]')
+                    if await cb.count() > 0:
+                        cb_id = await cb.first.get_attribute("id") or ""
+                        m = re.match(r"table-checkbox-(\d+)", cb_id)
+                        if m:
+                            doc_id = m.group(1)
 
                     if doc_type in EXCLUDED_DOC_TYPES:
                         skipped_excluded += 1
@@ -221,7 +242,7 @@ async def scrape_recorder_async(
                         owner_name=grantor,  # Defendant/grantor = property owner
                         notice_type=notice_type,
                         county="Franklin",
-                        source_url=f"{HOMEPAGE}/doc/{inst_num}" if inst_num else HOMEPAGE,
+                        source_url=f"{HOMEPAGE}/doc/{doc_id}" if doc_id else HOMEPAGE,
                         raw_text=raw_summary,
                         parcel_id=parcel,
                     ))
