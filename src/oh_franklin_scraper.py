@@ -236,7 +236,9 @@ def _scrape_probate_case(case_num: int) -> Optional[NoticeData]:
     # Decedent address (often N/A in Franklin County)
     street = fields.get("Decedent Street", "N/A")
     city = fields.get("City", "N/A")
-    zip_ = fields.get("Zip", "")
+    # The court's HTML truncates the "Zip" label to "Zi" (same as the fiduciary
+    # page) — read "Zi" first so the property ZIP isn't dropped.
+    zip_ = fields.get("Zi") or fields.get("Zip", "")
 
     # Fetch PR/administrator info from fiduciary page
     pr_name = ""
