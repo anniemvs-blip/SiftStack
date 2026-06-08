@@ -1010,6 +1010,7 @@ def cli_main() -> None:
             "daily", "historical", "pdf-import", "photo-import", "dropbox-watch",
             "csv-import", "phone-validate", "manage-sold", "manage-presets",
             "oh-daily",  # Franklin County, OH scraper
+            "oh-tax-refresh",  # Franklin County, OH tax-delinquent Treasurer refresh
             # New analysis & workflow modes
             "comp", "rehab", "analyze-deal", "market-analysis", "buyer-prospect",
             "deep-prospect", "lead-manage", "setup-sequences", "niche-sequential",
@@ -1020,6 +1021,7 @@ def cli_main() -> None:
             "dropbox-watch = poll Dropbox; csv-import = re-enrich CSV; "
             "phone-validate = Trestle scoring; manage-sold/manage-presets = DataSift ops; "
             "oh-daily = Franklin County OH scraper (foreclosure/probate/tax_sale); "
+            "oh-tax-refresh = refresh known delinquents via Treasurer per-parcel lookup; "
             "comp = comparable sales ARV; rehab = rehab cost estimate; "
             "analyze-deal = full deal analysis; market-analysis = zip code scoring; "
             "buyer-prospect = cash buyer lists; deep-prospect = 4-level research; "
@@ -1055,6 +1057,18 @@ def cli_main() -> None:
         type=int,
         default=0,
         help="Stop after scraping this many notices (0 = no limit)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Limit number of parcels processed (oh-tax-refresh mode; 0 = no limit)",
+    )
+    parser.add_argument(
+        "--skip-enrich",
+        action="store_true",
+        dest="skip_enrich",
+        help="Skip enrichment pipeline entirely (oh-daily mode). Writes raw scrape output.",
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -1681,6 +1695,11 @@ def cli_main() -> None:
         _run_oh_franklin(args)
         return
 
+    # Franklin County, OH tax-delinquent Treasurer refresh
+    if args.mode == "oh-tax-refresh":
+        _run_oh_tax_refresh(args)
+        return
+
     # Filter saved searches
     counties = None
     if args.counties and args.counties.lower() != "all":
@@ -1711,6 +1730,30 @@ def cli_main() -> None:
         except Exception:
             pass
         sys.exit(1)
+
+
+def _run_oh_tax_refresh(args) -> None:
+    """Refresh known tax-delinquent parcels via the Franklin County Treasurer.
+
+    Workflow: pull ~7,700 seed parcels from the (frozen) ArcGIS layer, hit
+    `treapropsearch.franklincountyohio.gov/Details.aspx` for each to get
+    current balance + owner + mailing address, drop any that have caught up,
+    and write a CSV.
+    """
+    from oh_franklin_treasurer import refresh_delinquent_via_treasurer
+
+    limit = args.limit if args.limit and args.limit > 0 else None
+    notices = refresh_delinquent_via_treasurer(limit=limit)
+
+    if not notices:
+        logging.warning("Tax refresh: no delinquent records remained after Treasurer lookup")
+        return
+
+    from data_formatter import write_csv
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    path = write_csv(notices, filename=f"franklin_oh_tax_refresh_{timestamp}.csv")
+    logging.info("Output: %s", path)
+    logging.info("Done — %d Franklin OH tax-delinquent records refreshed", len(notices))
 
 
 def _run_oh_franklin(args) -> None:
@@ -1752,16 +1795,82 @@ def _run_oh_franklin(args) -> None:
         logging.warning("No Franklin County OH records found for the given date range")
         return
 
-    # Write raw output CSV (no enrichment — Ohio enrichment pipeline not yet wired)
+    # Enrichment pipeline — fills ZIPs (Smarty), property data (Zillow), and
+    # deceased-owner detection (obituary) for the OH scrape output. Disabled
+    # with --skip-enrich for raw-only runs.
+    if not getattr(args, "skip_enrich", False):
+        # Probate property-address backstop for any case missing both street and
+        # PR's mailing match (rare for Franklin Co court records but happens).
+        probate_missing = [
+            n for n in notices
+            if n.notice_type == "probate" and n.decedent_name and not n.address
+        ]
+        if probate_missing:
+            try:
+                from property_lookup import lookup_decedent_properties
+                logging.info(
+                    "Looking up property addresses for %d probate notices...",
+                    len(probate_missing),
+                )
+                asyncio.run(lookup_decedent_properties(probate_missing))
+            except ImportError:
+                logging.warning("property_lookup module not found — skipping")
+            except Exception as e:
+                logging.warning("Probate property lookup failed: %s", e)
+
+        # Census Geocoder backstop — fills missing city (recorder records lack
+        # it) and missing ZIP (probate-court records lack it) using the free
+        # Census Geocoder. Runs BEFORE the pipeline so the Step 9b validation
+        # doesn't drop records for missing city. Free, no API key.
+        try:
+            from census_zip_fill import backfill_address_fields
+            backfill_address_fields(notices)
+        except Exception as e:
+            logging.warning("Census backstop failed: %s", e)
+
+        from enrichment_pipeline import PipelineOptions, run_enrichment_pipeline
+
+        # OH-specific defaults:
+        #  - skip_parcel_lookup: Step 4 is hardcoded to Knox TN (see project
+        #    memory parcel_lookup_knox_hardcoded). Franklin OH records already
+        #    arrive with parcel-resolved or name-resolved addresses.
+        #  - skip_entity_filter: the eviction scraper already curates an
+        #    institutional landlord blocklist; auto-dropping all LLCs would
+        #    also drop legitimate tax-delinquent LLC owners and small-portfolio
+        #    landlords we want to market to.
+        opts = PipelineOptions(
+            skip_filter_sold=True,
+            skip_parcel_lookup=True,
+            skip_entity_filter=True,
+            skip_smarty=getattr(args, "skip_smarty", False),
+            skip_zillow=getattr(args, "skip_zillow", False),
+            skip_tax=getattr(args, "skip_tax", False),
+            skip_geocode=getattr(args, "skip_geocode", False),
+            skip_obituary=getattr(args, "skip_obituary", False),
+            skip_ancestry=getattr(args, "skip_ancestry", False),
+            skip_vacant_filter=getattr(args, "include_vacant", False),
+            skip_commercial_filter=getattr(args, "include_commercial", False),
+            skip_heir_verification=getattr(args, "skip_heir_verification", False),
+            max_heir_depth=getattr(args, "max_heir_depth", 2),
+            skip_dm_address=getattr(args, "skip_dm_address", False),
+            tracerfy_tier1=getattr(args, "tracerfy_tier1", False),
+            source_label=f"CLI {args.mode}",
+        )
+        notices = run_enrichment_pipeline(notices, opts)
+
+    # Write enriched output CSV — use the DataSift-formatted writer so the CSV
+    # has the proper Tags column (with "Courthouse Data" on every record) and
+    # Lists column (notice_type → DataSift list name). This is what gets
+    # uploaded to DataSift via the niche sequential marketing pipeline.
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     if args.split:
-        from data_formatter import write_csv_by_type
-        paths = write_csv_by_type(notices, county="franklin_oh", timestamp=timestamp)
+        from datasift_formatter import write_datasift_split_csvs
+        paths = write_datasift_split_csvs(notices, date_str=timestamp)
         for p in paths:
             logging.info("Output: %s", p)
     else:
-        from data_formatter import write_csv
-        path = write_csv(notices, filename=f"franklin_oh_{timestamp}.csv")
+        from datasift_formatter import write_datasift_csv
+        path = write_datasift_csv(notices, filename=f"franklin_oh_{timestamp}.csv")
         logging.info("Output: %s", path)
 
     logging.info("Done — %d Franklin County OH records exported", len(notices))
