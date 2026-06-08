@@ -217,6 +217,7 @@ NOTICE_TYPE_TO_LIST = {
     "probate": "Probate",
     "tax_sale": "Tax Sale",
     "tax_delinquent": "Tax Delinquent",
+    "lien": "Liens",
     "eviction": "Eviction",
     "code_violation": "Code Violation",
     "divorce": "Divorce",
