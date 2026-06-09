@@ -524,6 +524,24 @@ def _build_property_section(notice: NoticeData) -> str:
     if notice.notice_type:
         parts.append(notice.notice_type.replace("_", " ").title())
 
+    # Estate Type in Notes too (not only its custom field) — the upload wizard
+    # often drops custom-field mappings, so Notes is the reliable carrier.
+    if notice.notice_type == "probate" and notice.estate_subtype:
+        parts.append(f"Estate Type: {notice.estate_subtype}")
+
+    # Probate occupancy signal (from PR mailing vs. property address): an
+    # absentee heir (mails elsewhere) is a higher-motivation lead than a PR who
+    # lives in the property (often the surviving spouse). Noted, not tagged.
+    if notice.notice_type == "probate" and notice.address and notice.owner_street:
+        pr_at_property = (
+            notice.owner_street.strip().upper() == notice.address.strip().upper()
+        )
+        parts.append(
+            "Occupancy: PR lives at property (likely owner-occupied — softer approach)"
+            if pr_at_property else
+            "Occupancy: PR mails elsewhere (likely absentee heir — higher motivation)"
+        )
+
     if notice.auction_date:
         parts.append(f"Auction: {_format_date(notice.auction_date)}")
 
