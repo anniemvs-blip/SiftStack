@@ -506,8 +506,14 @@ async def upload_csv(
         await page.wait_for_timeout(1000)
         return True
 
-    # Map Tags column: find "Tags" card on left, drag to "Tags" target on right
-    for col_name in ["Tags", "Lists"]:
+    # Map the columns that don't auto-map. Notes carries the key probate context
+    # (decedent, DOD, Estate Type, occupancy), so it MUST land; Lists drives
+    # routing; the rest are custom fields. Order matters least — each is a
+    # best-effort drag (DataSift's drag-and-drop is brittle).
+    for col_name in [
+        "Notes", "Lists", "Tags", "Estate Type", "Decedent Name",
+        "Owner Deceased", "Date of Death", "Personal Representative", "Source URL",
+    ]:
         try:
             # Source: unmapped column card on the left (contains column name + sample data)
             source = page.locator(f'div:has-text("{col_name}") >> visible=true').first
